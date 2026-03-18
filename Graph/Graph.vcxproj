@@ -127,6 +127,7 @@
     <ClInclude Include="Graph.h" />
     <ClInclude Include="GraphRenderer.h" />
     <ClInclude Include="OptimizationBuilder.h" />
+    <ClInclude Include="OptimizationProblem.h" />
     <ClInclude Include="Resource.h" />
     <ClInclude Include="targetver.h" />
     <ClInclude Include="UAVOptimization.h" />
@@ -137,6 +138,7 @@
     <ClCompile Include="Graph.cpp" />
     <ClCompile Include="GraphRenderer.cpp" />
     <ClCompile Include="OptimizationBuilder.cpp" />
+    <ClCompile Include="OptimizationProblem.cpp" />
     <ClCompile Include="UAVOptimization.cpp" />
     <ClCompile Include="UnitUAV.cpp" />
     <ClCompile Include="UnitUAVList.cpp" />

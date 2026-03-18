@@ -33,6 +33,7 @@ public:
 
     // Chuyển tọa độ thế giới -> màn hình
     POINT worldToScreen(double x, double y, RECT clientRect) const noexcept;
+    
 
     // Tính lại giới hạn (bounds) dựa trên dữ liệu đồ thị
     void calculateBounds();

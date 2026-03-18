@@ -77,7 +77,7 @@ class Graph
 {
 public:
     Graph() = default;
-
+    void removeVertexZero();
     // Generic CSV read (kept for compatibility)
     bool ReadFromFile(const std::string& path);
 
@@ -95,6 +95,9 @@ public:
         const std::string& uavPrefix = "UAV_",
         const std::string& uavExt = ".csv");
 
+    int findNearestVertex(double x, double y) const;
+    double shortestPathDistance(int startId, int endId) const;
+    std::vector<int> shortestPath(int startId, int endId) const;
 
     // Getter cho unitList
     UnitUAVList& getUnitList() { return unitList; }
@@ -107,6 +110,8 @@ public:
     const std::vector<Vertex>& GetVertices() const noexcept { return vertices_; }
     const std::vector<Edge>& GetEdges() const noexcept { return edges_; }
    
+    Vertex GetVertexById(int id) const;
+
     const std::vector<Target>& GetTargets() const noexcept { return targets_; }
     int getVertexCount() const noexcept { return static_cast<int>(vertices_.size()); }
     int getEdgeCount() const noexcept { return static_cast<int>(edges_.size()); }

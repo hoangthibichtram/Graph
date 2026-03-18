@@ -1,5 +1,5 @@
 #include "UnitUAVList.h"
-
+#include "OptimizationProblem.h"
 #include <fstream>
 #include <sstream>
 #include <algorithm>
@@ -116,6 +116,10 @@ bool UnitUAVList::loadUnitsFromFile(const std::string& path)
 
     std::string header;
     if (!std::getline(ifs, header)) return false;
+
+    RemoveUTF8BOM(header);
+    header = Trim(header);
+
     char delim = DetectDelimiter(header);
     auto hdr = ParseCsvLine(header, delim);
 
@@ -141,8 +145,7 @@ bool UnitUAVList::loadUnitsFromFile(const std::string& path)
     while (std::getline(ifs, line))
     {
         RemoveUTF8BOM(line);
-        header = Trim(line);
-
+        line = Trim(line);   
         if (line.empty()) continue;
         if (line[0] == '#' || line[0] == '/') continue;
 
@@ -165,6 +168,13 @@ bool UnitUAVList::loadUnitsFromFile(const std::string& path)
             if (it == unit_index_map_.end())
             {
                 UnitUAV u(u_id, u_name, x, y, z);
+
+                std::cout << "[UNIT] " << u_id
+                    << " name=" << u_name
+                    << " x=" << x
+                    << " y=" << y
+                    << " z=" << z << "\n";
+
                 units_.push_back(std::move(u));
                 unit_index_map_[u_id] = units_.size() - 1;
                 ++added;
@@ -186,25 +196,43 @@ bool UnitUAVList::loadUnitsFromFile(const std::string& path)
 // Đọc các file UAV riêng cho từng đơn vị trong thư mục.
 // Mỗi file có tên: prefix + unit_id + ext
 // Ví dụ: folder="data", prefix="UAV_", ext=".csv" -> "data/UAV_SQ1.csv"
-bool UnitUAVList::loadUAVsFromPerUnitFiles(const std::string& folder, const std::string& prefix, const std::string& ext)
+bool UnitUAVList::loadUAVsFromPerUnitFiles(const std::string& folder,
+    const std::string& prefix,
+    const std::string& ext)
 {
     bool anyAdded = false;
+
     for (auto& unit : units_)
     {
-        // build filename
         std::string filename = folder;
-        if (!filename.empty() && filename.back() != '/' && filename.back() != '\\') filename.push_back('/');
+        if (!filename.empty() && filename.back() != '/' && filename.back() != '\\')
+            filename.push_back('/');
         filename += "data_uav_" + unit.getUnitId() + ext;
 
-
-        // delegate đọc file cho UnitUAV (UnitUAV::readUAVsFromFile sẽ kiểm tra unit_id nếu cần)
         if (unit.readUAVsFromFile(filename))
         {
+            // ⭐ CHUYỂN UAV từ UnitUAV → UAVTypeOpt
+            for (const auto& u : unit.getUAVs())
+            {
+                UAVTypeOpt opt;
+                opt.id = u.getId();
+                opt.code = u.getCode();
+                opt.costPerAttack = u.getCostUsd();
+                opt.maxCount = 1;
+                opt.maxBudget = u.getCostUsd();
+                opt.unitIndex = unit_index_map_[unit.getUnitId()];
+                opt.unitName = unit.getUnitName();
+
+                // Khởi tạo vector aij/pij theo số mục tiêu (tạm để trống, OptimizationBuilder sẽ fill)
+            }
+
             anyAdded = true;
         }
     }
+
     return anyAdded;
 }
+
 
 // (không bắt buộc) giữ nguyên để khả năng đọc file tổng hợp nếu cần trong tương lai
 bool UnitUAVList::loadUAVsFromCombinedFile(const std::string& path)
@@ -224,6 +252,20 @@ int UnitUAVList::getTotalUAVCount() const
         total += unit.getUAVCount();
     }
     return total;
+}
+const UnitUAV& UnitUAVList::getUnit(size_t index) const
+{
+    return units_.at(index);
+}
+int UnitUAVList::getUnitIndex(const std::string& unitId) const
+{
+    const auto& units = getUnits();
+    for (int i = 0; i < units.size(); i++)
+    {
+        if (units[i].getUnitId() == unitId)
+            return i;
+    }
+    return -1; // không tìm thấy
 }
 
 

@@ -1,7 +1,6 @@
 #pragma once
 
 #include "UnitUAV.h"
-
 #include <string>
 #include <vector>
 #include <unordered_map>
@@ -24,10 +23,12 @@ public:
 
     const std::vector<UnitUAV>& getUnits() const noexcept { return units_; }
     int getUnitCount() const noexcept { return (int)units_.size(); }
+    const UnitUAV& getUnit(size_t index) const;
+    int getUnitIndex(const std::string& unitId) const;
 
 private:
     std::vector<UnitUAV> units_;
     std::unordered_map<std::string, size_t> unit_index_map_;
     std::vector<UnitUAV>& getUnitsRef() { return units_; }
-
+   
 };

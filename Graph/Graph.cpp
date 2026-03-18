@@ -4,8 +4,8 @@
 #include "framework.h"
 #include "Graph.h"
 #include "OptimizationBuilder.h"
-//#include "UAVOptimization.h"
-
+#include <queue>
+#include <utility>
 #include <fstream>
 #include <sstream>
 #include <cmath>
@@ -252,8 +252,6 @@ bool Graph::ReadEdgesFile(const std::string& path)
         std::cout << "HDR[" << i << "] = '" << hdr[i] << "'\n";
         hidx[ToLower(hdr[i])] = i;
     }
-
-
     int idxStart = (hidx.count("start") ? static_cast<int>(hidx["start"]) : (hidx.count("from") ? static_cast<int>(hidx["from"]) : -1));
     int idxEnd = (hidx.count("end") ? static_cast<int>(hidx["end"]) : (hidx.count("to") ? static_cast<int>(hidx["to"]) : -1));
     int idxWeight = (hidx.count("weight") ? static_cast<int>(hidx["weight"]) : -1);
@@ -262,9 +260,6 @@ bool Graph::ReadEdgesFile(const std::string& path)
     std::cout << "idxStart=" << idxStart
         << " idxEnd=" << idxEnd
         << " idxWeight=" << idxWeight << "\n";
-
-
-    
 
     std::string line;
     while (std::getline(ifs, line))
@@ -284,6 +279,10 @@ bool Graph::ReadEdgesFile(const std::string& path)
                 int startId = std::stoi(tok[idxStart]);
                 int endId = std::stoi(tok[idxEnd]);
 
+                if (startId == 0 || endId == 0) {
+                    std::cout << "SKIP EDGE with ID 0: " << startId << " -> " << endId << std::endl;
+                    continue;
+                }
                 // Kiểm tra vertex tồn tại
                 if (idIndexMap_.find(startId) == idIndexMap_.end() ||
                     idIndexMap_.find(endId) == idIndexMap_.end())
@@ -324,7 +323,7 @@ bool Graph::ReadTargetFile(const std::string& path)
 
     RemoveUTF8BOM(header); 
     header = Trim(header);
-    char delim = ';';  
+    char delim = DetectDelimiter(header);  
     auto hdr = ParseCsvLine(header, delim);
     std::unordered_map<std::string, size_t> hidx;
     for (size_t i = 0; i < hdr.size(); ++i) hidx[ToLower(hdr[i])] = i;
@@ -464,9 +463,130 @@ bool Graph::readAllData(const std::string& unitFile,
 
     return success;
 }
+Vertex Graph::GetVertexById(int id) const {
+    auto it = idIndexMap_.find(id);
+    if (it == idIndexMap_.end()) {
+        std::cerr << "[ERROR] Vertex id " << id << " not found!\n";
+        return Vertex(); // trả về rỗng
+    }
+    return vertices_[it->second];
+}
+double Graph::shortestPathDistance(int startId, int endId) const
+{
+    const double INF = 1e18;
+    std::unordered_map<int, double> dist;
+
+    for (auto& v : vertices_) dist[v.id] = INF;
+
+    using P = std::pair<double, int>;
+    std::priority_queue<P, std::vector<P>, std::greater<P>> pq;
+
+    dist[startId] = 0;
+    pq.push({ 0, startId });
+
+    while (!pq.empty()) {
+        auto top = pq.top();
+        double d = top.first;
+        int u = top.second;
+        pq.pop();
+        if (d != dist[u]) continue;
+        if (u == endId) break;
+
+        for (auto& e : edges_) {
+            if (e.start.id != u) continue;
+            int v = e.end.id;
+            double nd = d + e.weight;
+            if (nd < dist[v]) {
+                dist[v] = nd;
+                pq.push({ nd, v });
+            }
+        }
+    }
+
+    return dist[endId];
+}
+
+std::vector<int> Graph::shortestPath(int startId, int endId) const
+{
+    const double INF = 1e18;
+    std::unordered_map<int, double> dist;
+    std::unordered_map<int, int> prev;
+
+    for (auto& v : vertices_) dist[v.id] = INF;
+
+    using P = std::pair<double, int>;
+    std::priority_queue<P, std::vector<P>, std::greater<P>> pq;
+
+    dist[startId] = 0;
+    pq.push(P(0, startId));
+
+    while (!pq.empty()) {
+        P top = pq.top(); pq.pop();
+        double d = top.first;
+        int u = top.second;
+
+        if (d != dist[u]) continue;
+        if (u == endId) break;
+
+        for (auto& e : edges_) {
+            if (e.start.id != u) continue;
+            int v = e.end.id;
+            double nd = d + e.weight;
+            if (nd < dist[v]) {
+                dist[v] = nd;
+                prev[v] = u;
+                pq.push(P(nd, v));
+            }
+        }
+    }
+
+    std::vector<int> path;
+    if (!prev.count(endId)) return path;
+
+    for (int v = endId; v != startId; v = prev[v])
+        path.push_back(v);
+    path.push_back(startId);
+    std::reverse(path.begin(), path.end());
+    return path;
+}
+
+
+int Graph::findNearestVertex(double x, double y) const
+{
+    double best = 1e18;
+    int bestId = -1;
+
+    for (const auto& v : vertices_) {
+        double dx = v.x - x;
+        double dy = v.y - y;
+        double d = dx * dx + dy * dy;
+        if (d < best) {
+            best = d;
+            bestId = v.id;
+        }
+    }
+    return bestId;
+}
 
 
 
+// Graph.cpp - thêm ở cuối file, trước phần Win32
+
+void Graph::removeVertexZero()
+{
+    auto it = idIndexMap_.find(0);
+    if (it != idIndexMap_.end()) {
+        int index = it->second;
+        vertices_.erase(vertices_.begin() + index);
+        idIndexMap_.erase(it);
+
+        // Cập nhật lại idIndexMap_ cho các vertex còn lại
+        for (size_t i = 0; i < vertices_.size(); i++) {
+            idIndexMap_[vertices_[i].id] = static_cast<int>(i);
+        }
+        std::cout << "Đã xóa vertex 0 khỏi đồ thị" << std::endl;
+    }
+}
 
 
 
@@ -513,6 +633,7 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
         UAVGAOptimizer ga(prob, 50, 200, 0.7, 0.02);
 
         AssignmentSolution best = ga.run();
+       
         std::cout << "\n===== ASSIGNMENT RESULT =====\n";
         for (int i = 0; i < best.nUavTypes; i++) {
             for (int j = 0; j < best.nTargets; j++) {

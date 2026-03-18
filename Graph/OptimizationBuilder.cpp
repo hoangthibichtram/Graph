@@ -1,7 +1,10 @@
 #include "OptimizationBuilder.h"
+#include "OptimizationProblem.h"
+#include "UAVOptimization.h" 
 #include <cmath>
 #include <fstream>
 #include <unordered_map>
+
 
 static std::unordered_map<std::string, double> loadPij(const std::string& path)
 {
@@ -20,7 +23,7 @@ static std::unordered_map<std::string, double> loadPij(const std::string& path)
     {
         if (line.empty()) continue;
 
-        std::cout << "[Pij] RAW LINE: " << line << "\n";
+        //std::cout << "[Pij] RAW LINE: " << line << "\n";
 
         std::stringstream ss(line);
         std::string uavIdStr, tgtIdStr, pStr;
@@ -59,55 +62,98 @@ OptimizationProblem OptimizationBuilder::build(const UnitUAVList& unitList,
         to.value = t.value_usd;
         to.x = t.x;
         to.y = t.y;
+
         prob.targets.push_back(to);
+        // DEBUG TARGET
+        std::cout << "[DEBUG] Target " << to.id
+            << " pos=(" << to.x << "," << to.y << ")\n";
     }
-    int m = (int)prob.targets.size();
+    std::vector<int> targetIdMap;
+    for (const auto& t : targets)
+        targetIdMap.push_back(t.target_id);
 
-    // 2. Load p_ij từ file
-    auto pijMap = loadPij("D:\\VS_Prj\\Graph\\x64\\Debug\\Data\\Probability.csv");
-
-    // 3. UAV types
+    // 2. Build UAVTypeOpt list from UnitUAVList
     const auto& units = unitList.getUnits();
-    int uavTypeIndex = 0;
-    int unitIdx = 0;
+
     for (const auto& unit : units)
     {
         for (const auto& u : unit.getUAVs())
         {
-            UAVTypeOpt ut;
-            ut.id = uavTypeIndex++;
-            ut.code = u.getCode();
-            ut.costPerAttack = u.getCostUsd();
-            ut.maxCount = 1;              // nếu 1 dòng = 1 UAV
-            ut.maxBudget = u.getCostUsd();
-            ut.unitIndex = unitIdx;
-            ut.unitName = unit.getUnitName();
+            UAVTypeOpt opt;
+            opt.id = u.getId();
+            opt.code = u.getCode();
 
-            ut.aij.assign(m, 0);
-            ut.pij.assign(m, 0.0);
+            // GA parameters (tùy bạn chỉnh)
+            opt.costPerAttack = u.getCostUsd();
+            opt.maxBudget = u.getCostUsd() * 5;   // ví dụ: mỗi UAV được dùng tối đa 5 lần
+            opt.maxCount = 3;
 
-            for (int j = 0; j < m; ++j)
-            {
-                std::string key = std::to_string(ut.id) + "|" + std::to_string(j);
-                auto it = pijMap.find(key);
+            opt.unitIndex = unitList.getUnitIndex(unit.getUnitId());
+            opt.unitName = unit.getUnitName();
 
-                if (it != pijMap.end()) {
-                    ut.aij[j] = 1;
-                    ut.pij[j] = it->second;
-                }
-                else {
-                    ut.aij[j] = 0;
-                    ut.pij[j] = 0.0;
-                }
-            }
+            // Khởi tạo vector aij/pij theo số mục tiêu
+            opt.aij.resize(prob.targets.size(), 1);   // tạm cho phép tấn công tất cả
+            opt.pij.resize(prob.targets.size(), 0.0); // sẽ load từ file Pij
 
-
-            prob.uavs.push_back(ut);
+            prob.uavs.push_back(opt);
         }
-        unitIdx++;
     }
 
+    int m = (int)prob.targets.size();
+    int n = (int)prob.uavs.size();
+    std::cout << "UAV count = " << n << "\n";
+
+    // 2. Load p_ij từ file
+    auto pijMap = loadPij("D:\\VS_Prj\\Graph\\x64\\Debug\\Data\\Probability.csv");
+    // 3. Gán Pij vào UAVTypeOpt
+    for (auto& uav : prob.uavs)
+    {
+        for (int j = 0; j < prob.targets.size(); j++)
+        {
+            std::string key = std::to_string(uav.id) + "|" + std::to_string(prob.targets[j].id);
+            if (pijMap.count(key))
+                uav.pij[j] = pijMap[key];
+        }
+    }
+
+
+    int populationSize = 5;
+    int maxGenerations = 3;
+    double crossoverRate = 0.8;
+    double mutationRate = 0.05;
+
+    UAVGAOptimizer ga(prob, populationSize, maxGenerations, crossoverRate, mutationRate);
+    AssignmentSolution best = ga.run();
+
+    // chuẩn bị mảng paths trong best
+    best.paths.resize(n, std::vector<std::vector<int>>(m));
+
+    for (int i = 0; i < n; i++)
+    {
+        for (int j = 0; j < m; j++)
+        {
+            if (best.x[i * m + j] == 1)
+            {
+                best.paths[i][j] =
+                    graph.shortestPath(prob.uavs[i].unitIndex, prob.targets[j].id);
+            }
+        }
+    }
+    best.unitIndex.resize(n);
+    for (int i = 0; i < n; i++)
+    {
+        best.unitIndex[i] = prob.uavs[i].unitIndex;
+    }
+
+    prob.bestSolution.x = best.x;
+    prob.bestSolution.fitness = best.fitness;
+    prob.bestSolution.paths = best.paths;
+    prob.bestSolution.unitIndex = best.unitIndex;
+    prob.bestSolution.nUavTypes = best.nUavTypes;
+    prob.bestSolution.nTargets = best.nTargets;
+
     return prob;
+
 }
 
 

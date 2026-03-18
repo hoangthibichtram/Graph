@@ -1,6 +1,5 @@
 #define NOMINMAX
 #include "GraphRenderer.h"
-//#include "UAVOptimization.h"
 #include <algorithm>
 #include <cmath>
 #include <string>
@@ -37,6 +36,12 @@ void GraphRenderer::drawAssignment(HDC hdc, RECT clientRect)
 {
     if (!hasAssignment_ || !unitList_ || !graph_) return;
 
+    std::cout << "DEBUG assignment_: n=" << assignment_.nUavTypes
+        << " m=" << assignment_.nTargets
+        << " x.size=" << assignment_.x.size()
+        << " paths.size=" << assignment_.paths.size()
+        << "\n";
+
     int n = assignment_.nUavTypes;
     int m = assignment_.nTargets;
 
@@ -48,7 +53,7 @@ void GraphRenderer::drawAssignment(HDC hdc, RECT clientRect)
 
     for (int i = 0; i < n; i++)
     {   
-        int unitIdx = assignment_.uavs[i].unitIndex;
+        int unitIdx = assignment_.unitIndex[i];
         const auto& unit = unitList_->getUnits()[unitIdx];
 
         double ux = unit.getX();
@@ -66,8 +71,26 @@ void GraphRenderer::drawAssignment(HDC hdc, RECT clientRect)
                 POINT pT = worldToScreen(tx, ty, clientRect);
                 for (int k = 0; k < count; ++k)
                 {
-                    MoveToEx(hdc, pU.x, pU.y, NULL);
-                    LineTo(hdc, pT.x, pT.y);
+                    // path = danh sách ID các đỉnh từ Unit → Target
+                    if (i >= assignment_.paths.size()) continue;
+                    if (j >= assignment_.paths[i].size()) continue;
+
+                    const std::vector<int>& path = assignment_.paths[i][j];
+                    if (path.size() < 2) continue;
+
+                    for (int v = 0; v < path.size() - 1; v++)
+                    {
+                        const auto& v1 = graph_->GetVertexById(path[v]);
+                        const auto& v2 = graph_->GetVertexById(path[v + 1]);
+
+                        POINT p1 = worldToScreen(v1.x, v1.y, clientRect);
+                        POINT p2 = worldToScreen(v2.x, v2.y, clientRect);
+
+                        MoveToEx(hdc, p1.x, p1.y, NULL);
+                        LineTo(hdc, p2.x, p2.y);
+                    }
+
+
                 }
             }
 
@@ -414,3 +437,4 @@ void GraphRenderer::resetView()
     offsetY_ = 0;
     boundsValid_ = false;
 }
+
