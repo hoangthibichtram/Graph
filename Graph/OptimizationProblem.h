@@ -11,6 +11,7 @@ struct TargetOpt
     std::string code;
     double value;
     double x, y;
+    int vertexId;
 };
 
 struct UAVTypeOpt

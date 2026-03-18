@@ -62,6 +62,8 @@ OptimizationProblem OptimizationBuilder::build(const UnitUAVList& unitList,
         to.value = t.value_usd;
         to.x = t.x;
         to.y = t.y;
+        to.vertexId = t.id_vertex;   // ⭐ LẤY ĐÚNG VERTEX CỦA TARGET
+
 
         prob.targets.push_back(to);
         // DEBUG TARGET
@@ -144,8 +146,10 @@ OptimizationProblem OptimizationBuilder::build(const UnitUAVList& unitList,
                 continue;
 
             // 3) Tìm vertex gần nhất với target j
-            int endV = graph.findNearestVertex(prob.targets[j].x,
-                prob.targets[j].y);
+            int endV = prob.targets[j].vertexId;   // ⭐ DÙNG ĐÚNG VERTEX CỦA TARGET
+
+           /* int endV = graph.findNearestVertex(prob.targets[j].x,
+                prob.targets[j].y);*/
 
             // 4) Tìm đường đi
             std::vector<int> path = graph.shortestPath(startV, endV);
