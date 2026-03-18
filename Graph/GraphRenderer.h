@@ -43,6 +43,8 @@ public:
 private:
     const Graph* graph_;              // nguồn đồ thị (không sở hữu)
     const UnitUAVList* unitList_;     // danh sách đơn vị (không sở hữu)
+    // Vẽ đường đi UAV → Target
+    void drawPath(HDC hdc, const std::vector<int>& path, RECT clientRect);
 
     double scale_;                    // tỷ lệ zoom (world units -> pixels)
     int offsetX_;                     // dịch ngang (pixel)
@@ -65,5 +67,6 @@ private:
 
     AssignmentSolution assignment_;
     bool hasAssignment_ = false;
+
 
 };

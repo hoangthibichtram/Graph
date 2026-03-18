@@ -1,4 +1,5 @@
 #include "UAVOptimization.h"
+#include "OptimizationProblem.h"
 #include <random>
 #include <cmath>
 #include <algorithm>

@@ -1,28 +1,21 @@
 #pragma once
-
 #include <vector>
 #include <string>
-#include "OptimizationProblem.h"   // dùng lại TargetOpt, UAVTypeOpt, OptimizationProblem
 
-// Một nghiệm (cá thể) của GA: ma trận x_ij
+class OptimizationProblem;   
+
 struct AssignmentSolution {
-    int nUavTypes;
-    int nTargets;
+    int nUavTypes{};
+    int nTargets{};
     std::vector<int> x;
-    double fitness;
+    double fitness{};
     std::vector<int> unitIndex;
-
     std::vector<std::vector<std::vector<int>>> paths;
 
-    int at(int i, int j) const {
-        return x[i * nTargets + j];
-    }
-    int& at(int i, int j) {
-        return x[i * nTargets + j];
-    }
+    int at(int i, int j) const { return x[i * nTargets + j]; }
+    int& at(int i, int j) { return x[i * nTargets + j]; }
 };
 
-// Lớp GA
 class UAVGAOptimizer
 {
 public:
@@ -35,7 +28,7 @@ public:
     AssignmentSolution run();
 
 private:
-    const OptimizationProblem& prob_;
+    const OptimizationProblem& prob_;   // ✔ dùng được vì forward declare đủ
     int popSize_;
     int maxGen_;
     double pc_;

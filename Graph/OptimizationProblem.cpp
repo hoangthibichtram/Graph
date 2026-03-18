@@ -1,6 +1,8 @@
 #include "OptimizationProblem.h"
+#include "UAVOptimization.h"   
 
-double OptimizationProblem::evaluate(const Solution& sol) const
+
+double OptimizationProblem::evaluate(const AssignmentSolution& sol) const
 {
     int n = uavs.size();
     int m = targets.size();

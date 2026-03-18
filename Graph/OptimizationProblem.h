@@ -2,6 +2,8 @@
 #pragma once
 #include <vector>
 #include <string>
+#include "UAVOptimization.h"
+
 
 struct TargetOpt
 {
@@ -31,16 +33,7 @@ public:
     std::vector<TargetOpt> targets;
     std::vector<UAVTypeOpt> uavs;
 
-    struct Solution {
-        std::vector<int> x;   // xij nhị phân, kích thước = n*m
-        double fitness;
-        std::vector<std::vector<std::vector<int>>> paths;
-        int nUavTypes = 0;
-        int nTargets = 0;
-        std::vector<int> unitIndex;
-    };
+    AssignmentSolution bestSolution;
 
-    Solution bestSolution;
-
-    double evaluate(const Solution& sol) const;
+    double evaluate(const AssignmentSolution& sol) const;
 };

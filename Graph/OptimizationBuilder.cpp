@@ -130,15 +130,31 @@ OptimizationProblem OptimizationBuilder::build(const UnitUAVList& unitList,
 
     for (int i = 0; i < n; i++)
     {
+        const UAVTypeOpt& uav = prob.uavs[i];
+
+        // 1) Lấy đơn vị chứa UAV i
+        const UnitUAV& unit = unitList.getUnit(uav.unitIndex);
+
+        // 2) Tìm vertex gần nhất với đơn vị
+        int startV = graph.findNearestVertex(unit.getX(), unit.getY());
+
         for (int j = 0; j < m; j++)
         {
-            if (best.x[i * m + j] == 1)
-            {
-                best.paths[i][j] =
-                    graph.shortestPath(prob.uavs[i].unitIndex, prob.targets[j].id);
-            }
+            if (best.x[i * m + j] != 1)
+                continue;
+
+            // 3) Tìm vertex gần nhất với target j
+            int endV = graph.findNearestVertex(prob.targets[j].x,
+                prob.targets[j].y);
+
+            // 4) Tìm đường đi
+            std::vector<int> path = graph.shortestPath(startV, endV);
+
+            // 5) Lưu vào best.paths
+            best.paths[i][j] = std::move(path);
         }
     }
+
     best.unitIndex.resize(n);
     for (int i = 0; i < n; i++)
     {

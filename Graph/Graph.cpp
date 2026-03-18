@@ -4,6 +4,8 @@
 #include "framework.h"
 #include "Graph.h"
 #include "OptimizationBuilder.h"
+#include "OptimizationProblem.h"
+#include "UAVOptimization.h"
 #include <queue>
 #include <utility>
 #include <fstream>
@@ -630,9 +632,8 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
             OptimizationBuilder::build(g_graph.getUnitList(), g_graph);
         std::cout << "UAV count   = " << prob.uavs.size() << "\n";
         std::cout << "Target count= " << prob.targets.size() << "\n";
-        UAVGAOptimizer ga(prob, 50, 200, 0.7, 0.02);
+        const AssignmentSolution& best = prob.bestSolution;
 
-        AssignmentSolution best = ga.run();
        
         std::cout << "\n===== ASSIGNMENT RESULT =====\n";
         for (int i = 0; i < best.nUavTypes; i++) {

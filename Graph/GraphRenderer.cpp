@@ -23,24 +23,16 @@ GraphRenderer::GraphRenderer() noexcept
     , boundsValid_(false)
 {
 }
-AssignmentSolution assignment_;
-bool hasAssignment_ = false;
-
 void GraphRenderer::setAssignment(const AssignmentSolution& sol)
 {
     assignment_ = sol;
     hasAssignment_ = true;
 }
 
+
 void GraphRenderer::drawAssignment(HDC hdc, RECT clientRect)
 {
     if (!hasAssignment_ || !unitList_ || !graph_) return;
-
-    std::cout << "DEBUG assignment_: n=" << assignment_.nUavTypes
-        << " m=" << assignment_.nTargets
-        << " x.size=" << assignment_.x.size()
-        << " paths.size=" << assignment_.paths.size()
-        << "\n";
 
     int n = assignment_.nUavTypes;
     int m = assignment_.nTargets;
@@ -48,58 +40,66 @@ void GraphRenderer::drawAssignment(HDC hdc, RECT clientRect)
     const auto& units = unitList_->getUnits();
     const auto& targets = graph_->GetTargets();
 
+    // DEBUG: in ra để xem dữ liệu có hợp lý không
+    std::cout << "ASSIGN n=" << n
+        << " m=" << m
+        << " x.size=" << assignment_.x.size()
+        << " unitIndex.size=" << assignment_.unitIndex.size()
+        << " paths.size=" << assignment_.paths.size() << "\n";
+
     HPEN pen = CreatePen(PS_SOLID, 2, RGB(255, 0, 0));
     HPEN oldPen = (HPEN)SelectObject(hdc, pen);
 
     for (int i = 0; i < n; i++)
-    {   
+    {
+        if (i >= (int)assignment_.unitIndex.size()) continue;
         int unitIdx = assignment_.unitIndex[i];
-        const auto& unit = unitList_->getUnits()[unitIdx];
+        if (unitIdx < 0 || unitIdx >= (int)units.size()) continue;
+
+        const auto& unit = units[unitIdx];
 
         double ux = unit.getX();
         double uy = unit.getY();
 
         for (int j = 0; j < m; j++)
         {
+            // bảo vệ x
+            if (i * m + j >= (int)assignment_.x.size()) continue;
             int count = assignment_.at(i, j);
-            if (count > 0)
+            if (count <= 0) continue;
+
+            if (j >= (int)targets.size()) continue;
+
+            double tx = targets[j].x;
+            double ty = targets[j].y;
+
+            POINT pU = worldToScreen(ux, uy, clientRect);
+            POINT pT = worldToScreen(tx, ty, clientRect);
+
+            if (i >= (int)assignment_.paths.size()) continue;
+            if (j >= (int)assignment_.paths[i].size()) continue;
+
+            const std::vector<int>& path = assignment_.paths[i][j];
+            if (path.size() < 2) continue;
+
+            for (int v = 0; v < (int)path.size() - 1; v++)
             {
-                double tx = targets[j].x;
-                double ty = targets[j].y;
+                const auto& v1 = graph_->GetVertexById(path[v]);
+                const auto& v2 = graph_->GetVertexById(path[v + 1]);
 
-                POINT pU = worldToScreen(ux, uy, clientRect);
-                POINT pT = worldToScreen(tx, ty, clientRect);
-                for (int k = 0; k < count; ++k)
-                {
-                    // path = danh sách ID các đỉnh từ Unit → Target
-                    if (i >= assignment_.paths.size()) continue;
-                    if (j >= assignment_.paths[i].size()) continue;
+                POINT p1 = worldToScreen(v1.x, v1.y, clientRect);
+                POINT p2 = worldToScreen(v2.x, v2.y, clientRect);
 
-                    const std::vector<int>& path = assignment_.paths[i][j];
-                    if (path.size() < 2) continue;
-
-                    for (int v = 0; v < path.size() - 1; v++)
-                    {
-                        const auto& v1 = graph_->GetVertexById(path[v]);
-                        const auto& v2 = graph_->GetVertexById(path[v + 1]);
-
-                        POINT p1 = worldToScreen(v1.x, v1.y, clientRect);
-                        POINT p2 = worldToScreen(v2.x, v2.y, clientRect);
-
-                        MoveToEx(hdc, p1.x, p1.y, NULL);
-                        LineTo(hdc, p2.x, p2.y);
-                    }
-
-
-                }
+                MoveToEx(hdc, p1.x, p1.y, NULL);
+                LineTo(hdc, p2.x, p2.y);
             }
-
         }
     }
 
     SelectObject(hdc, oldPen);
     DeleteObject(pen);
 }
+
 
 
 
@@ -437,4 +437,27 @@ void GraphRenderer::resetView()
     offsetY_ = 0;
     boundsValid_ = false;
 }
+void GraphRenderer::drawPath(HDC hdc, const std::vector<int>& path, RECT clientRect)
+{
+    if (!graph_ || path.size() < 2) return;
+
+    HPEN hPen = CreatePen(PS_SOLID, 3, RGB(255, 0, 0)); // màu đỏ
+    HGDIOBJ oldPen = SelectObject(hdc, hPen);
+
+    for (size_t k = 1; k < path.size(); ++k)
+    {
+        Vertex a = graph_->GetVertexById(path[k - 1]);
+        Vertex b = graph_->GetVertexById(path[k]);
+
+        POINT pa = worldToScreen(a.x, a.y, clientRect);
+        POINT pb = worldToScreen(b.x, b.y, clientRect);
+
+        MoveToEx(hdc, pa.x, pa.y, nullptr);
+        LineTo(hdc, pb.x, pb.y);
+    }
+
+    SelectObject(hdc, oldPen);
+    DeleteObject(hPen);
+}
+
 
