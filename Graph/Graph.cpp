@@ -1,11 +1,4 @@
-// Graph.cpp : Updated: new CSV readers for Vertex, Edge, Data_uav, Data_target.
-// Uses robust header mapping for specified column names.
-#include "GraphRenderer.h"
-#include "framework.h"
 #include "Graph.h"
-#include "OptimizationBuilder.h"
-#include "OptimizationProblem.h"
-#include "UAVOptimization.h"
 #include <queue>
 #include <utility>
 #include <fstream>
@@ -14,22 +7,6 @@
 #include <algorithm>
 #include <cctype>
 #include <iostream>
-
-#define MAX_LOADSTRING 100
-
-// Global Variables:
-Graph g_graph;
-GraphRenderer g_renderer;
-HINSTANCE hInst;                                // current instance
-WCHAR szTitle[MAX_LOADSTRING];                  // The title bar text
-WCHAR szWindowClass[MAX_LOADSTRING]; 
-HWND hWnd;
-
-// Forward declarations:
-ATOM                MyRegisterClass(HINSTANCE hInstance);
-BOOL                InitInstance(HINSTANCE, int);
-LRESULT CALLBACK    WndProc(HWND, UINT, WPARAM, LPARAM);
-INT_PTR CALLBACK    About(HWND, UINT, WPARAM, LPARAM);
 
 namespace
 {
@@ -50,8 +27,6 @@ namespace
         return s.substr(start, end - start);
     }
 
-
-
     static inline std::string ToLower(std::string s)
     {
         for (char& ch : s)
@@ -69,7 +44,6 @@ namespace
             s.erase(0, 3);
         }
     }
-
 
     static inline bool IsNumberStart(const std::string& s)
     {
@@ -120,7 +94,7 @@ namespace
     }
 }
 
-// --- Core graph functions (unchanged behavior) ---
+// --- Core graph functions ---
 
 bool Graph::AddEdge(const Vertex& start, const Vertex& end, float weight)
 {
@@ -181,18 +155,16 @@ std::vector<Vertex> Graph::findVerticesInRadius(double x, double y, double z, do
     return result;
 }
 
-// --- New specific CSV readers ---
+// --- Specific CSV readers ---
 
-// Read Vertex.csv with columns: x,y,id,typeVertex
 bool Graph::ReadVerticesFile(const std::string& path)
 {
     std::ifstream ifs(path);
     if (!ifs.is_open()) return false;
 
-    // read header
     std::string header;
     if (!std::getline(ifs, header)) return false;
-    RemoveUTF8BOM(header);   
+    RemoveUTF8BOM(header);
     header = Trim(header);
     char delim = DetectDelimiter(header);
     auto hdr = ParseCsvLine(header, delim);
@@ -233,11 +205,9 @@ bool Graph::ReadVerticesFile(const std::string& path)
         }
         catch (...) { continue; }
     }
-
     return true;
 }
 
-// Read Edge.csv with columns: WKT,id,start,end,weight
 bool Graph::ReadEdgesFile(const std::string& path)
 {
     std::ifstream ifs(path);
@@ -245,23 +215,18 @@ bool Graph::ReadEdgesFile(const std::string& path)
 
     std::string header;
     if (!std::getline(ifs, header)) return false;
-    RemoveUTF8BOM(header);  
+    RemoveUTF8BOM(header);
     header = Trim(header);
     char delim = DetectDelimiter(header);
     auto hdr = ParseCsvLine(header, delim);
     std::unordered_map<std::string, size_t> hidx;
     for (size_t i = 0; i < hdr.size(); ++i) {
-        std::cout << "HDR[" << i << "] = '" << hdr[i] << "'\n";
         hidx[ToLower(hdr[i])] = i;
     }
     int idxStart = (hidx.count("start") ? static_cast<int>(hidx["start"]) : (hidx.count("from") ? static_cast<int>(hidx["from"]) : -1));
     int idxEnd = (hidx.count("end") ? static_cast<int>(hidx["end"]) : (hidx.count("to") ? static_cast<int>(hidx["to"]) : -1));
     int idxWeight = (hidx.count("weight") ? static_cast<int>(hidx["weight"]) : -1);
     int idxId = (hidx.count("id") ? static_cast<int>(hidx["id"]) : -1);
-
-    std::cout << "idxStart=" << idxStart
-        << " idxEnd=" << idxEnd
-        << " idxWeight=" << idxWeight << "\n";
 
     std::string line;
     while (std::getline(ifs, line))
@@ -281,36 +246,23 @@ bool Graph::ReadEdgesFile(const std::string& path)
                 int startId = std::stoi(tok[idxStart]);
                 int endId = std::stoi(tok[idxEnd]);
 
-                if (startId == 0 || endId == 0) {
-                    std::cout << "SKIP EDGE with ID 0: " << startId << " -> " << endId << std::endl;
-                    continue;
-                }
-                // Kiểm tra vertex tồn tại
+                if (startId == 0 || endId == 0) continue;
+
                 if (idIndexMap_.find(startId) == idIndexMap_.end() ||
                     idIndexMap_.find(endId) == idIndexMap_.end())
                 {
-                    std::cout << "SKIP EDGE: " << startId << " -> " << endId
-                        << " (vertex not found)\n";
-                    continue;
+                    continue; // Skip if vertex not found
                 }
 
-                // Lấy vertex thật
                 const Vertex& sV = vertices_[idIndexMap_[startId]];
                 const Vertex& eV = vertices_[idIndexMap_[endId]];
 
-                // ⭐ TÍNH WEIGHT THEO KHOẢNG CÁCH THỰC
                 float w = static_cast<float>(ComputeDistance(sV, eV));
-
-                // Thêm cạnh
                 AddEdge(sV, eV, w);
             }
-
         }
         catch (...) { continue; }
     }
-    std::cout << "DONE EDGE FILE\n";
-    std::cout << "Total edges added = " << edges_.size() << "\n";
-
     return true;
 }
 
@@ -323,9 +275,9 @@ bool Graph::ReadTargetFile(const std::string& path)
     std::string header;
     if (!std::getline(ifs, header)) return false;
 
-    RemoveUTF8BOM(header); 
+    RemoveUTF8BOM(header);
     header = Trim(header);
-    char delim = DetectDelimiter(header);  
+    char delim = DetectDelimiter(header);
     auto hdr = ParseCsvLine(header, delim);
     std::unordered_map<std::string, size_t> hidx;
     for (size_t i = 0; i < hdr.size(); ++i) hidx[ToLower(hdr[i])] = i;
@@ -378,106 +330,50 @@ bool Graph::ReadTargetFile(const std::string& path)
         }
         catch (...) { continue; }
     }
-
     return true;
 }
 
-// Keep existing generic ReadFromFile for compatibility (delegates by file name heuristic)
 bool Graph::ReadFromFile(const std::string& path)
 {
-    // simple heuristic by filename
     std::string lower = ToLower(path);
     if (lower.find("vertex") != std::string::npos) return ReadVerticesFile(path);
     if (lower.find("edge") != std::string::npos) return ReadEdgesFile(path);
-    //if (lower.find("uav") != std::string::npos) return ReadUavFile(path);
     if (lower.find("target") != std::string::npos) return ReadTargetFile(path);
 
-    // fallback: try edge read then vertex read
     if (ReadVerticesFile(path)) return true;
     if (ReadEdgesFile(path)) return true;
     return false;
 }
 
-// Thêm vào cuối file Graph.cpp, trước phần Win32
-
 bool Graph::readAllData(const std::string& unitFile,
     const std::string& vertexFile,
     const std::string& edgeFile,
+    const std::string& targetFile,
     const std::string& unitsFolder,
     const std::string& uavPrefix,
     const std::string& uavExt)
 {
     bool success = true;
 
-    std::cout << "\n========== BẮT ĐẦU ĐỌC DỮ LIỆU ==========\n";
-
-    //  Đọc vertices
-    std::cout << "1. Đọc vertices từ " << vertexFile << "..." << std::endl;
-    if (!ReadVerticesFile(vertexFile)) {
-        std::cerr << "    Lỗi đọc file vertex!" << std::endl;
-        success = false;
-    }
-    else {
-        std::cout << "    Đã đọc " << vertices_.size() << " vertices" << std::endl;
-    }
-
-    //  Đọc edges
-    std::cout << "2. Đọc edges từ " << edgeFile << "..." << std::endl;
-    if (!ReadEdgesFile(edgeFile)) {
-        std::cerr << "    Lỗi đọc file edge!" << std::endl;
-        success = false;
-    }
-    else {
-        std::cout << "    Đã đọc " << edges_.size() << " edges" << std::endl;
-    }
-
-    //  Đọc đơn vị
-    std::cout << "3. Đọc đơn vị từ " << unitFile << "..." << std::endl;
-    if (!unitList.loadUnitsFromFile(unitFile)) {
-        std::cerr << "    Lỗi đọc file đơn vị!" << std::endl;
-        success = false;
-    }
-    else {
-        std::cout << "    Đã đọc " << unitList.getUnitCount() << " đơn vị" << std::endl;
-    }
-
-    //  Đọc UAV cho từng đơn vị
-    std::cout << "4. Đọc UAV từ thư mục " << unitsFolder << "..." << std::endl;
-    if (!unitList.loadUAVsFromPerUnitFiles(unitsFolder, uavPrefix, uavExt)) {
-        std::cerr << "    Cảnh báo: Một số file UAV không đọc được!" << std::endl;
-    }
-
-    //  Đọc target
-    std::cout << "5. Đọc target từ D:\\VS_Prj\\Graph\\x64\\Debug\\Data\\Data_target.csv..." << std::endl;
-    if (!ReadTargetFile("D:\\VS_Prj\\Graph\\x64\\Debug\\Data\\Data_target.csv")) {
-        std::cerr << "    Lỗi đọc file target!" << std::endl;
-    }
-    else {
-        std::cout << "    Đã đọc " << targets_.size() << " target" << std::endl;
-    }
-
-    //  In tổng kết
-    std::cout << "\n========== TỔNG KẾT ==========\n";
-    std::cout << "Vertices: " << vertices_.size() << std::endl;
-    std::cout << "Edges: " << edges_.size() << std::endl;
-    std::cout << "Đơn vị: " << unitList.getUnitCount() << std::endl;
-    std::cout << "Tổng số UAV: " << unitList.getTotalUAVCount() << std::endl;
+    if (!ReadVerticesFile(vertexFile)) success = false;
+    if (!ReadEdgesFile(edgeFile)) success = false;
+    if (!unitList.loadUnitsFromFile(unitFile)) success = false;
+    unitList.loadUAVsFromPerUnitFiles(unitsFolder, uavPrefix, uavExt);
+    if (!ReadTargetFile(targetFile)) success = false;
 
     return success;
 }
+
 Vertex Graph::GetVertexById(int id) const {
     auto it = idIndexMap_.find(id);
-    if (it == idIndexMap_.end()) {
-        std::cerr << "[ERROR] Vertex id " << id << " not found!\n";
-        return Vertex(); // trả về rỗng
-    }
+    if (it == idIndexMap_.end()) return Vertex();
     return vertices_[it->second];
 }
+
 double Graph::shortestPathDistance(int startId, int endId) const
 {
     const double INF = 1e18;
     std::unordered_map<int, double> dist;
-
     for (auto& v : vertices_) dist[v.id] = INF;
 
     using P = std::pair<double, int>;
@@ -504,7 +400,6 @@ double Graph::shortestPathDistance(int startId, int endId) const
             }
         }
     }
-
     return dist[endId];
 }
 
@@ -552,7 +447,6 @@ std::vector<int> Graph::shortestPath(int startId, int endId) const
     return path;
 }
 
-
 int Graph::findNearestVertex(double x, double y) const
 {
     double best = 1e18;
@@ -570,10 +464,6 @@ int Graph::findNearestVertex(double x, double y) const
     return bestId;
 }
 
-
-
-// Graph.cpp - thêm ở cuối file, trước phần Win32
-
 void Graph::removeVertexZero()
 {
     auto it = idIndexMap_.find(0);
@@ -582,236 +472,8 @@ void Graph::removeVertexZero()
         vertices_.erase(vertices_.begin() + index);
         idIndexMap_.erase(it);
 
-        // Cập nhật lại idIndexMap_ cho các vertex còn lại
         for (size_t i = 0; i < vertices_.size(); i++) {
             idIndexMap_[vertices_[i].id] = static_cast<int>(i);
         }
-        std::cout << "Đã xóa vertex 0 khỏi đồ thị" << std::endl;
     }
-}
-
-
-
-
-// --- Win32 boilerplate unchanged below (kept from original) ---
-
-int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
-    _In_opt_ HINSTANCE hPrevInstance,
-    _In_ LPWSTR    lpCmdLine,
-    _In_ int       nCmdShow)
-{
-    UNREFERENCED_PARAMETER(hPrevInstance);
-    UNREFERENCED_PARAMETER(lpCmdLine);
-
-    // Initialize global strings
-    LoadStringW(hInstance, IDS_APP_TITLE, szTitle, MAX_LOADSTRING);
-    LoadStringW(hInstance, IDC_GRAPH, szWindowClass, MAX_LOADSTRING);
-    MyRegisterClass(hInstance);
-
-    AllocConsole();
-    FILE* fp;
-    freopen_s(&fp, "CONOUT$", "w", stdout);
-    freopen_s(&fp, "CONOUT$", "w", stderr);
-
-    if (!InitInstance(hInstance, nCmdShow)) return FALSE;
-
-    if (g_graph.readAllData(
-        "D:\\VS_Prj\\Graph\\x64\\Debug\\Data\\UnitUAV.csv",
-        "D:\\VS_Prj\\Graph\\x64\\Debug\\Data\\Vertex.csv",
-        "D:\\VS_Prj\\Graph\\x64\\Debug\\Data\\Edge.csv",
-        "D:\\VS_Prj\\Graph\\x64\\Debug\\Data\\units"
-    )) {
-        std::cout << "\n Đọc dữ liệu THÀNH CÔNG!" << std::endl;
-
-        // Gán dữ liệu cho renderer
-        g_renderer.setGraph(g_graph);
-        g_renderer.setUnitList(g_graph.getUnitList());
-        g_renderer.resetView();
-
-        OptimizationProblem prob =
-            OptimizationBuilder::build(g_graph.getUnitList(), g_graph);
-        std::cout << "UAV count   = " << prob.uavs.size() << "\n";
-        std::cout << "Target count= " << prob.targets.size() << "\n";
-        const AssignmentSolution& best = prob.bestSolution;
-
-       
-        std::cout << "\n===== ASSIGNMENT RESULT =====\n";
-        for (int i = 0; i < best.nUavTypes; i++) {
-            for (int j = 0; j < best.nTargets; j++) {
-                if (best.at(i, j) == 1) {
-                    std::cout << "UAV type " << i
-                        << " attacks Target " << j << "\n";
-                }
-            }
-        }
-        std::cout << "Fitness = " << best.fitness << "\n";
-        std::cout << "=============================\n";
-
-        g_renderer.setAssignment(best);
-        InvalidateRect(hWnd, NULL, TRUE);
-
-    }
-    else
-    {
-        std::cerr << "\n LỖI đọc dữ liệu!" << std::endl;
-    }
-
-
-
-    HACCEL hAccelTable = LoadAccelerators(hInstance, MAKEINTRESOURCE(IDC_GRAPH));
-    MSG msg;
-
-    while (GetMessage(&msg, nullptr, 0, 0))
-    {
-        if (!TranslateAccelerator(msg.hwnd, hAccelTable, &msg))
-        {
-            TranslateMessage(&msg);
-            DispatchMessage(&msg);
-        }
-    }
-
-    return (int)msg.wParam;
-}
-
-ATOM MyRegisterClass(HINSTANCE hInstance)
-{
-    WNDCLASSEXW wcex;
-    wcex.cbSize = sizeof(WNDCLASSEX);
-    wcex.style = CS_HREDRAW | CS_VREDRAW;
-    wcex.lpfnWndProc = WndProc;
-    wcex.cbClsExtra = 0;
-    wcex.cbWndExtra = 0;
-    wcex.hInstance = hInstance;
-    wcex.hIcon = LoadIcon(hInstance, MAKEINTRESOURCE(IDI_GRAPH));
-    wcex.hCursor = LoadCursor(nullptr, IDC_ARROW);
-    wcex.hbrBackground = (HBRUSH)(COLOR_WINDOW + 1);
-    wcex.lpszMenuName = MAKEINTRESOURCEW(IDC_GRAPH);
-    wcex.lpszClassName = szWindowClass;
-    wcex.hIconSm = LoadIcon(wcex.hInstance, MAKEINTRESOURCE(IDI_SMALL));
-    return RegisterClassExW(&wcex);
-}
-
-BOOL InitInstance(HINSTANCE hInstance, int nCmdShow)
-{
-    hInst = hInstance;
-    hWnd = CreateWindowW(szWindowClass, szTitle, WS_OVERLAPPEDWINDOW,
-        CW_USEDEFAULT, 0, CW_USEDEFAULT, 0, nullptr, nullptr, hInstance, nullptr);
-    if (!hWnd) return FALSE;
-    ShowWindow(hWnd, nCmdShow);
-    UpdateWindow(hWnd);
-    return TRUE;
-}
-
-LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
-{
-    switch (message)
-    {
-    case WM_PAINT:
-    {
-        PAINTSTRUCT ps;
-        HDC hdc = BeginPaint(hWnd, &ps);
-
-        RECT clientRect;
-        GetClientRect(hWnd, &clientRect);
-
-        g_renderer.draw(hdc, clientRect);
-
-        EndPaint(hWnd, &ps);
-    }
-    break;
-
-    case WM_SIZE:
-        InvalidateRect(hWnd, NULL, TRUE);
-        break;
-
-    case WM_MOUSEWHEEL:
-    {
-        int delta = GET_WHEEL_DELTA_WPARAM(wParam);
-        if (delta > 0)
-            g_renderer.zoomIn();
-        else
-            g_renderer.zoomOut();
-        InvalidateRect(hWnd, NULL, TRUE);
-    }
-    break;
-
-    case WM_LBUTTONDOWN:
-        SetCapture(hWnd);
-        break;
-
-    case WM_LBUTTONUP:
-        ReleaseCapture();
-        break;
-
-    case WM_MOUSEMOVE:
-    {
-        static int lastX = -1;
-        static int lastY = -1;
-
-        if (wParam & MK_LBUTTON)
-        {
-            int x = LOWORD(lParam);
-            int y = HIWORD(lParam);
-
-            if (lastX != -1 && lastY != -1)
-            {
-                int dx = x - lastX;
-                int dy = y - lastY;
-                g_renderer.pan(dx, dy);
-                InvalidateRect(hWnd, NULL, TRUE);
-            }
-
-            lastX = x;
-            lastY = y;
-        }
-        else
-        {
-            lastX = lastY = -1;
-        }
-    }
-    break;
-
-
-    case WM_COMMAND:
-    {
-        int wmId = LOWORD(wParam);
-        switch (wmId)
-        {
-        case IDM_ABOUT:
-            DialogBox(hInst, MAKEINTRESOURCE(IDD_ABOUTBOX), hWnd, About);
-            break;
-        case IDM_EXIT:
-            DestroyWindow(hWnd);
-            break;
-        default:
-            return DefWindowProc(hWnd, message, wParam, lParam);
-        }
-    }
-    break;
-
-    case WM_DESTROY:
-        PostQuitMessage(0);
-        break;
-
-    default:
-        return DefWindowProc(hWnd, message, wParam, lParam);
-    }
-    return 0;
-}
-
-INT_PTR CALLBACK About(HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam)
-{
-    UNREFERENCED_PARAMETER(lParam);
-    switch (message)
-    {
-    case WM_INITDIALOG: return (INT_PTR)TRUE;
-    case WM_COMMAND:
-        if (LOWORD(wParam) == IDOK || LOWORD(wParam) == IDCANCEL)
-        {
-            EndDialog(hDlg, LOWORD(wParam));
-            return (INT_PTR)TRUE;
-        }
-        break;
-    }
-    return (INT_PTR)FALSE;
 }

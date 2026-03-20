@@ -91,6 +91,7 @@ public:
     bool readAllData(const std::string& unitFile,
         const std::string& vertexFile,
         const std::string& edgeFile,
+        const std::string& targetFile,
         const std::string& unitsFolder,
         const std::string& uavPrefix = "UAV_",
         const std::string& uavExt = ".csv");
