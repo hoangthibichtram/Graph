@@ -100,10 +100,6 @@ void UAVGAOptimizer::evaluate(AssignmentSolution& sol)
 
         double killProb = 1.0 - Sj;
         F_killProb[j] = killProb;
-
-        if (prob_.targets[j].type == "AirDefense" && killProb < 0.6) {
-            activeDefenses.push_back(j);
-        }
     }
 
     // 2. Chấm điểm Thích nghi nguyên thủy (Chỉ tính sát thương)
@@ -111,18 +107,6 @@ void UAVGAOptimizer::evaluate(AssignmentSolution& sol)
     for (int j = 0; j < m; ++j)
     {
         double hitRate = F_killProb[j];
-
-        if (prob_.targets[j].type != "AirDefense") {
-            bool isProtected = false;
-            for (int defJ : activeDefenses) {
-                double dx = prob_.targets[j].x - prob_.targets[defJ].x;
-                double dy = prob_.targets[j].y - prob_.targets[defJ].y;
-                double dist = std::sqrt(dx * dx + dy * dy);
-                if (dist <= 50.0) { isProtected = true; break; }
-            }
-            if (isProtected) { hitRate *= 0.5; }
-        }
-
         double vj = prob_.targets[j].value;
         F += vj * hitRate; // Điểm thu về  từ sát thương triệt để
     }
