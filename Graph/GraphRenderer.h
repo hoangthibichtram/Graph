@@ -4,6 +4,7 @@
 #include "Graph.h"
 #include "unitUAVList.h"
 #include "UAVOptimization.h"
+#include "UAVMissionEngine.h"
 
 
 class GraphRenderer
@@ -40,6 +41,11 @@ public:
     void setAssignment(const AssignmentSolution& sol);
     void drawAssignment(HDC hdc, RECT clientRect);
 
+    void setEngine(UAVCore::UAVMissionEngine* engine) { m_engine = engine; }
+
+    // Thêm hàm này vào phần public
+    bool handleUnitClick(int mouseX, int mouseY, RECT clientRect);
+
 private:
     const Graph* graph_;              // nguồn đồ thị (không sở hữu)
     const UnitUAVList* unitList_;     // danh sách đơn vị (không sở hữu)
@@ -68,5 +74,7 @@ private:
     AssignmentSolution assignment_;
     bool hasAssignment_ = false;
 
+    UAVCore::UAVMissionEngine* m_engine = nullptr;
 
+    int selectedUnitIndex_ = -1; // -1 nghĩa là đang không chọn Căn cứ nào
 };

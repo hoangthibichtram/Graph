@@ -66,7 +66,6 @@ struct Target
     double x;
     double y;
     float altitude;
-    int priority;
     float explosize;
     double value_usd;
     int id_vertex;
@@ -93,7 +92,7 @@ public:
         const std::string& edgeFile,
         const std::string& targetFile,
         const std::string& unitsFolder,
-        const std::string& uavPrefix = "UAV_",
+        const std::string& uavPrefix = "data_uav_",
         const std::string& uavExt = ".csv");
 
     int findNearestVertex(double x, double y) const;

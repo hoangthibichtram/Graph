@@ -17,36 +17,51 @@ static std::unordered_map<std::string, double> loadPij(const std::string& path)
     }
 
     std::string line;
-    std::getline(ifs, line); // bỏ header
+    std::getline(ifs, line); // Bỏ qua header đầu tiên
+
+    // Hàm tiện ích nhỏ để xóa khoảng trắng 2 đầu
+    auto trim = [](std::string& s) {
+        s.erase(0, s.find_first_not_of(" \t\r\n"));
+        s.erase(s.find_last_not_of(" \t\r\n") + 1);
+        };
 
     while (std::getline(ifs, line))
     {
         if (line.empty()) continue;
 
-        //std::cout << "[Pij] RAW LINE: " << line << "\n";
-
         std::stringstream ss(line);
-        std::string uavIdStr, tgtIdStr, pStr;
+        std::string uavCodeStr, tgtIdStr, pStr;
 
-        std::getline(ss, uavIdStr, ',');
+        std::getline(ss, uavCodeStr, ',');
         std::getline(ss, tgtIdStr, ',');
         std::getline(ss, pStr, ',');
 
-        if (uavIdStr.empty() || tgtIdStr.empty() || pStr.empty())
+        // CHỖ SỬA QUAN TRỌNG NHẤT: Làm sạch mọi khoảng trắng thừa do lỗi đánh máy file CSV!
+        trim(uavCodeStr);
+        trim(tgtIdStr);
+        trim(pStr);
+
+        if (uavCodeStr.empty() || tgtIdStr.empty() || pStr.empty())
             continue;
 
-        int uavId = std::stoi(uavIdStr);
-        int tgtId = std::stoi(tgtIdStr);
-        double p = std::stod(pStr);
+        try {
+            int tgtId = std::stoi(tgtIdStr);
+            double p = std::stod(pStr);
 
-        std::string key = std::to_string(uavId) + "|" + std::to_string(tgtId);
-        mp[key] = p;
+            std::string key = uavCodeStr + "|" + std::to_string(tgtId);
+            mp[key] = p;
+
+            // Hiện dòng này ra màn hình Console để bạn tận mắt nhìn thấy hệ thống đã đọc được:
+            // std::cout << "Ghi nhan Key: *" << key << "* = " << p << "\n";
+        }
+        catch (...) {
+            // Lỗi Parse số thì bỏ qua
+        }
     }
 
     std::cout << "[Pij] Loaded " << mp.size() << " probability entries.\n";
     return mp;
 }
-
 OptimizationProblem OptimizationBuilder::build(const UnitUAVList& unitList,
     const Graph& graph)
 {
@@ -59,16 +74,17 @@ OptimizationProblem OptimizationBuilder::build(const UnitUAVList& unitList,
         TargetOpt to;
         to.id = t.target_id;
         to.code = t.code;
+        to.name = t.name;           
         to.value = t.value_usd;
         to.x = t.x;
         to.y = t.y;
-        to.vertexId = t.id_vertex;   // ⭐ LẤY ĐÚNG VERTEX CỦA TARGET
-
+        to.vertexId = t.id_vertex;   
+        to.type = t.typeVertex;      
 
         prob.targets.push_back(to);
         // DEBUG TARGET
         std::cout << "[DEBUG] Target " << to.id
-            << " pos=(" << to.x << "," << to.y << ")\n";
+            << " name=" << to.name << " pos=(" << to.x << "," << to.y << ") type=" << to.type << "\n";
     }
     std::vector<int> targetIdMap;
     for (const auto& t : targets)
@@ -85,7 +101,7 @@ OptimizationProblem OptimizationBuilder::build(const UnitUAVList& unitList,
             opt.id = u.getId();
             opt.code = u.getCode();
 
-            // GA parameters (tùy bạn chỉnh)
+            // GA parameters (Nguyên bản của bạn, không đổi cost trinh sát gì hết)
             opt.costPerAttack = u.getCostUsd();
             opt.maxBudget = u.getCostUsd() * 5;   // ví dụ: mỗi UAV được dùng tối đa 5 lần
             opt.maxCount = 3;
@@ -112,9 +128,13 @@ OptimizationProblem OptimizationBuilder::build(const UnitUAVList& unitList,
     {
         for (int j = 0; j < prob.targets.size(); j++)
         {
-            std::string key = std::to_string(uav.id) + "|" + std::to_string(prob.targets[j].id);
-            if (pijMap.count(key))
+            std::string key = uav.code + "|" + std::to_string(prob.targets[j].id);
+            if (pijMap.count(key)) {
                 uav.pij[j] = pijMap[key];
+            } else {
+              // NẾU GẶP MỤC TIÊU LẠ KHÔNG CÓ TRONG FILE PROBABILITY, GÁN TỶ LỆ TRÚNG 50%
+                uav.pij[j] = 0.0; 
+            }
         }
     }
 

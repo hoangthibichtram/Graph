@@ -9,9 +9,11 @@ struct TargetOpt
 {
     int id;
     std::string code;
+    std::string name;
     double value;
     double x, y;
     int vertexId;
+    std::string type;
 };
 
 struct UAVTypeOpt

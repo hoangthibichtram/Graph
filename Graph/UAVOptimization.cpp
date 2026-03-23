@@ -28,7 +28,7 @@ UAVGAOptimizer::UAVGAOptimizer(const OptimizationProblem& problem,
 // Khởi tạo quần thể: x[i,j] = số UAV loại i tấn công mục tiêu j
 void UAVGAOptimizer::initPopulation()
 {
-    int n = (int)prob_.uavs.size();    // số loại UAV
+    int n = (int)prob_.uavs.size();    // số loại UAV (thực chất là số lượng từng con UAV)
     int m = (int)prob_.targets.size(); // số mục tiêu
 
     if (n <= 0 || m <= 0)
@@ -45,31 +45,25 @@ void UAVGAOptimizer::initPopulation()
     population_.clear();
     population_.resize(popSize_);
 
+    std::uniform_int_distribution<int> bit(0, 1);
+
     for (int k = 0; k < popSize_; ++k)
     {
         AssignmentSolution sol;
         sol.nUavTypes = n;
         sol.nTargets = m;
         sol.x.assign(n * m, 0);
-        // copy thông tin UAV
 
-        // Khởi tạo: phân bổ ngẫu nhiên nhưng không vượt quá maxCount
+        // Khởi tạo: phân bổ ngẫu nhiên ngẫu nhiên xij = 0 hoặc 1
         for (int i = 0; i < n; ++i)
         {
-            std::uniform_int_distribution<int> bit(0, 1);
-
-            for (int i = 0; i < n; ++i)
+            for (int j = 0; j < m; ++j)
             {
-                for (int j = 0; j < m; ++j)
-                {
-                    if (prob_.uavs[i].aij[j] == 0)
-                        sol.at(i, j) = 0;
-                    else
-                        sol.at(i, j) = bit(rng());   // xij = 0 hoặc 1
-                }
+                if (prob_.uavs[i].aij[j] == 0)
+                    sol.at(i, j) = 0;
+                else
+                    sol.at(i, j) = bit(rng());   // Chỉ sử dụng 0 hoặc 1 như nguyên thủy
             }
-
-                
         }
 
         repair(sol);
@@ -78,7 +72,7 @@ void UAVGAOptimizer::initPopulation()
     }
 }
 
-// Hàm thích nghi F = ∑ v_j (1 - ∏ (1 - p_ij)^{x_ij})
+// Hàm thích nghi F = ∑ v_j (1 - ∏ (1 - p_ij)^{x_ij}) - CÓ KHẤU TRỪ PHÒNG KHÔNG CHI VIỆN
 void UAVGAOptimizer::evaluate(AssignmentSolution& sol)
 {
     if (sol.x.size() != sol.nUavTypes * sol.nTargets)
@@ -87,34 +81,52 @@ void UAVGAOptimizer::evaluate(AssignmentSolution& sol)
     int n = sol.nUavTypes;
     int m = sol.nTargets;
 
-    double F = 0.0;
+    std::vector<double> F_killProb(m, 0.0);
+    std::vector<int> activeDefenses;
 
+    // 1. Tính toán hiệu quả rải bom thô & Nhận diện Trạm Phòng Không còn sống
     for (int j = 0; j < m; ++j)
     {
         double Sj = 1.0;
-
         for (int i = 0; i < n; ++i)
         {
             int xij = sol.at(i, j);
             if (xij <= 0) continue;
 
-            double pij = prob_.uavs[i].pij[j];
-           /* std::cout << "i=" << i << " j=" << j
-                << " xij=" << xij
-                << " pij=" << pij << "\n";*/
-
-            double missOne = 1.0 - pij;
+            double missOne = 1.0 - prob_.uavs[i].pij[j];
             double missAll = std::pow(missOne, xij);
             Sj *= missAll;
         }
 
-        double vj = prob_.targets[j].value;
-       // std::cout << "j=" << j << " vj=" << vj << "\n";
+        double killProb = 1.0 - Sj;
+        F_killProb[j] = killProb;
 
-        F += vj * (1.0 - Sj);
+        if (prob_.targets[j].type == "AirDefense" && killProb < 0.6) {
+            activeDefenses.push_back(j);
+        }
     }
 
-   // std::cout << "F = " << F << "\n";
+    // 2. Chấm điểm Thích nghi nguyên thủy (Chỉ tính sát thương)
+    double F = 0.0;
+    for (int j = 0; j < m; ++j)
+    {
+        double hitRate = F_killProb[j];
+
+        if (prob_.targets[j].type != "AirDefense") {
+            bool isProtected = false;
+            for (int defJ : activeDefenses) {
+                double dx = prob_.targets[j].x - prob_.targets[defJ].x;
+                double dy = prob_.targets[j].y - prob_.targets[defJ].y;
+                double dist = std::sqrt(dx * dx + dy * dy);
+                if (dist <= 50.0) { isProtected = true; break; }
+            }
+            if (isProtected) { hitRate *= 0.5; }
+        }
+
+        double vj = prob_.targets[j].value;
+        F += vj * hitRate; // Điểm thu về  từ sát thương triệt để
+    }
+
     sol.fitness = F;
 }
 
@@ -198,11 +210,9 @@ void UAVGAOptimizer::repair(AssignmentSolution& sol)
         sol.x.assign(sol.nUavTypes * sol.nTargets, 0);
     }
 
-    int n = sol.nUavTypes;   // số loại UAV
+    int n = sol.nUavTypes;   // số lượng UAV
     int m = sol.nTargets;    // số mục tiêu
     if (m <= 0) return;
-
-    std::uniform_int_distribution<int> distTarget(0, m - 1);
 
     for (int i = 0; i < n; ++i)
     {
@@ -220,14 +230,16 @@ void UAVGAOptimizer::repair(AssignmentSolution& sol)
 
         for (int j = 0; j < m; ++j)
         {
-            if (sol.at(i, j) == 1)
+            if (sol.at(i, j) == 1) // Chỉ kiểm tra bằng 1
             {
                 totalCount++;
                 totalCost += cost;
 
                 double vj = prob_.targets[j].value;
                 double pij = prob_.uavs[i].pij[j];
-                double e = (cost > 0 ? (vj * pij) / cost : 0.0);
+                
+                // Tránh lỗi chia cho 0 nếu cost = 0, nếu cost bằng 0 thì ta cho hiệu suất cao (ví dụ vj * pij)
+                double e = (cost > 0 ? (vj * pij) / cost : (vj * pij));
 
                 items.push_back({ j, e });
             }
@@ -243,7 +255,7 @@ void UAVGAOptimizer::repair(AssignmentSolution& sol)
                 [](const Item& a, const Item& b) { return a.e < b.e; });
 
             int jRemove = items.front().j;
-            sol.at(i, jRemove) = 0;
+            sol.at(i, jRemove) = 0; // Trực tiếp đặt thành 0 để chặn đánh mục tiêu này
 
             totalCount--;
             totalCost -= cost;
@@ -251,10 +263,7 @@ void UAVGAOptimizer::repair(AssignmentSolution& sol)
             items.erase(items.begin());
         }
     }
-
-
 }
-
 
 // Chạy GA
 AssignmentSolution UAVGAOptimizer::run()
