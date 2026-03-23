@@ -51,8 +51,6 @@ static std::unordered_map<std::string, double> loadPij(const std::string& path)
             std::string key = uavCodeStr + "|" + std::to_string(tgtId);
             mp[key] = p;
 
-            // Hiện dòng này ra màn hình Console để bạn tận mắt nhìn thấy hệ thống đã đọc được:
-            // std::cout << "Ghi nhan Key: *" << key << "* = " << p << "\n";
         }
         catch (...) {
             // Lỗi Parse số thì bỏ qua
