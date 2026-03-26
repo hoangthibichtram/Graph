@@ -191,9 +191,6 @@ namespace UAVCore {
 
         return stats;
     }
-
-    // =========================================================================
-    // HÀM TỰ ĐỘNG CẮM ĐƯỜNG BAY CHO ĐƠN VỊ VÀO BẢN ĐỒ
     void UAVMissionEngine::ConnectUnitsToGraph()
     {
         // Ta sẽ coi mỗi Đơn vị như là 1 trạm Vertex ảo, đặt ID bắt đầu từ 10000 
@@ -230,6 +227,22 @@ namespace UAVCore {
         
         PrintLog("[UAVMissionEngine] Da giang day duong bay ket noi cac Base (Unit) vao Mang luoi!");
     }
-    // =========================================================================
+
+    void UAVMissionEngine::PrintAssignmentReport(std::ostream& os) const
+    {
+        const auto& uavs = m_problem.uavs;
+        const auto& targets = m_problem.targets;
+        const auto& assignment = m_bestSolution;
+        int n = assignment.nUavTypes, m = assignment.nTargets;
+        for (int i = 0; i < n; ++i) {
+            const auto& uav = uavs[i];
+            for (int j = 0; j < m; ++j) {
+                if (assignment.at(i, j) == 1) {
+                    os << "UAV " << uav.code << " (Đơn vị: " << uav.unitName
+                       << ") tấn công mục tiêu: " << targets[j].name << std::endl;
+                }
+            }
+        }
+    }
 
 } // kết thúc namespace UAVCore

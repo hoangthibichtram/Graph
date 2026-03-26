@@ -80,6 +80,8 @@ namespace UAVCore {
         const AssignmentSolution& GetBestSolution() const { return m_bestSolution; }
         const OptimizationProblem& GetProblem() const { return m_problem; }
 
+        void PrintAssignmentReport(std::ostream& os = std::cout) const;
+
     private:
         // Hàm nội bộ gọi đến Logger đã đăng ký
         void PrintLog(const std::string& msg);

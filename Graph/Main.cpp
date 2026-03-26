@@ -162,6 +162,7 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
         g_renderer.setAssignment(g_engine.GetBestSolution());
         g_renderer.setEngine(&g_engine); 
         g_renderer.resetView();
+        g_engine.PrintAssignmentReport();
 
         InvalidateRect(hWnd, NULL, TRUE);
     }
@@ -365,3 +366,4 @@ INT_PTR CALLBACK About(HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam)
     }
     return (INT_PTR)FALSE;
 }
+

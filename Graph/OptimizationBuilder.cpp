@@ -101,8 +101,8 @@ OptimizationProblem OptimizationBuilder::build(const UnitUAVList& unitList,
 
             // GA parameters (Nguyên bản của bạn, không đổi cost trinh sát gì hết)
             opt.costPerAttack = u.getCostUsd();
-            opt.maxBudget = u.getCostUsd() * 5;   // ví dụ: mỗi UAV được dùng tối đa 5 lần
-            opt.maxCount = 3;
+            opt.maxBudget = u.getCostUsd() * 3;   // ví dụ: mỗi UAV được dùng tối đa 5 lần
+            opt.maxCount = 1; 
 
             opt.unitIndex = unitList.getUnitIndex(unit.getUnitId());
             opt.unitName = unit.getUnitName();
