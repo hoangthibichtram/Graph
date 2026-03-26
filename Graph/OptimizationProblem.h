@@ -14,6 +14,8 @@ struct TargetOpt
     double x, y;
     int vertexId;
     std::string type;
+	double explosive_required; // Lượng nổ cần thiết để tiêu diệt mục tiêu
+
 };
 
 struct UAVTypeOpt
@@ -25,9 +27,9 @@ struct UAVTypeOpt
     double maxBudget;
     int unitIndex;
     std::string unitName;
-
     std::vector<int> aij;     // khả dụng
     std::vector<double> pij;  // xác suất
+    double explosive;
 };
 
 class OptimizationProblem

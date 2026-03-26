@@ -78,7 +78,7 @@ OptimizationProblem OptimizationBuilder::build(const UnitUAVList& unitList,
         to.y = t.y;
         to.vertexId = t.id_vertex;   
         to.type = t.typeVertex;      
-
+        to.explosive_required = t.explosize; // Sử dụng đúng tên trường trong struct Target // <-- Gán lượng nổ cần thiết từ dữ liệu gốc
         prob.targets.push_back(to);
         // DEBUG TARGET
         std::cout << "[DEBUG] Target " << to.id
@@ -98,7 +98,7 @@ OptimizationProblem OptimizationBuilder::build(const UnitUAVList& unitList,
             UAVTypeOpt opt;
             opt.id = u.getId();
             opt.code = u.getCode();
-
+            opt.explosive = u.getExplosive(); // <-- Gán lượng nổ của UAV từ dữ liệu gốc
             // GA parameters (Nguyên bản của bạn, không đổi cost trinh sát gì hết)
             opt.costPerAttack = u.getCostUsd();
             opt.maxBudget = u.getCostUsd() * 3;   // ví dụ: mỗi UAV được dùng tối đa 5 lần

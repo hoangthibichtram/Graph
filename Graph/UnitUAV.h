@@ -7,9 +7,7 @@
 #include <sstream>
 #include <iostream>
 
-// =========================
-// CLASS UAV (duy nhất)
-// =========================
+
 class UAV
 {
 private:
@@ -48,7 +46,7 @@ public:
     float getRange() const { return range; }
     float getSpeed() const { return speed; }
     const std::string& getWeapon() const { return weapon; }
-    float getExplosize() const { return explosize; }
+    float getExplosive() const { return explosize; }
     float getRadius() const { return radius; }
     double getCostUsd() const { return cost_usd; }
     const std::string& getUnitId() const { return unit_id; }
@@ -77,10 +75,6 @@ public:
     }
 };
 
-
-// =========================
-// CLASS UnitUAV
-// =========================
 class UnitUAV
 {
 public:

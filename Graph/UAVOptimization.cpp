@@ -214,8 +214,10 @@ void UAVGAOptimizer::repair(AssignmentSolution& sol)
 
         for (int j = 0; j < m; ++j)
         {
-            if (sol.at(i, j) == 1) // Chỉ kiểm tra bằng 1
+       
+            if (sol.at(i, j) == 1)
             {
+
                 totalCount++;
                 totalCost += cost;
 
@@ -225,7 +227,7 @@ void UAVGAOptimizer::repair(AssignmentSolution& sol)
                 // Tránh lỗi chia cho 0 nếu cost = 0, nếu cost bằng 0 thì ta cho hiệu suất cao (ví dụ vj * pij)
                 double e = (cost > 0 ? (vj * pij) / cost : (vj * pij));
 
-                items.push_back({ j, e });
+                items.push_back({ j, e });//
             }
         }
 
@@ -245,6 +247,40 @@ void UAVGAOptimizer::repair(AssignmentSolution& sol)
             totalCost -= cost;
 
             items.erase(items.begin());
+        }
+    }
+
+    // 2. Ràng buộc lượng nổ cho từng mục tiêu
+    for (int j = 0; j < m; ++j)
+    {
+        double requiredExplosive = prob_.targets[j].explosive_required; // field này phải có trong target
+        double totalExplosive = 0.0;
+        struct UavAssign { int i; double eff; double explosive; double cost; };
+        std::vector<UavAssign> assigned;
+
+        for (int i = 0; i < n; ++i)
+        {
+            if (sol.at(i, j) == 1)
+            {
+                double vj = prob_.targets[j].value;
+                double pij = prob_.uavs[i].pij[j];
+                double cost = prob_.uavs[i].costPerAttack;
+                double explosive = prob_.uavs[i].explosive; // field này phải có trong UAV
+                double eff = (cost > 0 ? (vj * pij) / cost : (vj * pij));
+                assigned.push_back({ i, eff, explosive, cost });
+                totalExplosive += explosive;
+            }
+        }
+
+        // Nếu tổng lượng nổ vượt yêu cầu, loại bỏ UAV hiệu suất thấp cho đến khi vừa đủ
+        while (!assigned.empty() && totalExplosive - assigned.front().explosive >= requiredExplosive)
+        {
+            std::sort(assigned.begin(), assigned.end(),
+                [](const UavAssign& a, const UavAssign& b) { return a.eff < b.eff; });
+            int iRemove = assigned.front().i;
+            totalExplosive -= assigned.front().explosive;
+            sol.at(iRemove, j) = 0;
+            assigned.erase(assigned.begin());
         }
     }
 }
