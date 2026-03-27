@@ -137,7 +137,7 @@ void GraphRenderer::draw(HDC hdc, RECT clientRect)
         std::wstring profitStatus = (netProfit > 0) ? L" (LAI)" : L" (LO)";
         dashboardText += L"[4] Loi nhuan/Thiet hai: " + std::to_wstring(netProfit) + L" $" + profitStatus + L"\n";
         dashboardText += L"[5] Muc do tieu diet Can cu Dich: " + std::to_wstring((int)stats.successRate) + L" %\n";
-        dashboardText += L"[6] So diem, Nhom UAV da tiep can: " + std::to_wstring(stats.totalTargetsHit) + L"\n";
+        dashboardText += L"[6] So diem muc tieu da danh: " + std::to_wstring(stats.totalTargetsHit) + L"\n";
         dashboardText += L"[7] Tong UAV tham chien: " + std::to_wstring(stats.totalUAVDeployed) + L" UAV.\n";
 
         SetBkMode(hdc, TRANSPARENT);
@@ -434,22 +434,35 @@ std::vector<std::string> GraphRenderer::getUAVsForTarget(int targetIdx) const
     int m = assignment_.nTargets;
     if (targetIdx < 0 || targetIdx >= m) return result;
 
-    // Duyệt qua tất cả loại UAV
+    const auto& units = unitList_->getUnits();
+
     for (int i = 0; i < n; ++i) {
         if (assignment_.at(i, targetIdx) > 0) {
-            // Lấy tên/mã UAV từ assignment (nếu có), hoặc tạo tên mặc định
             std::string uavName = "UAV_" + std::to_string(i + 1);
 
-            // Nếu có unitList, lấy tên đơn vị và mã UAV
-            if (assignment_.unitIndex.size() > i && unitList_) {
+            // Lấy đúng đơn vị chứa UAV loại i
+            if (assignment_.unitIndex.size() > i) {
                 int unitIdx = assignment_.unitIndex[i];
-                const auto& units = unitList_->getUnits();
                 if (unitIdx >= 0 && unitIdx < (int)units.size()) {
                     const auto& uavs = units[unitIdx].getUAVs();
-                    // Tìm UAV có code trùng với assignment (nếu có)
-                    if (i < (int)uavs.size()) {
-                        uavName = uavs[i].getCode();
+                    // Tìm UAV có code trùng với loại i (nếu có)
+                    // Nếu mỗi UAV có id duy nhất, bạn có thể duyệt qua uavs để tìm đúng code
+                    // Ở đây, nếu mỗi unit chỉ có 1 UAV, lấy luôn
+                    if (!uavs.empty()) {
+                        // Nếu số lượng UAV của đơn vị == nUavTypes, lấy theo i
+                        if ((int)uavs.size() == n) {
+                            uavName = uavs[i].getCode();
+                        }
+                        else {
+                            // Nếu không, lấy UAV đầu tiên của đơn vị
+                            uavName = uavs[0].getCode();
+                        }
                     }
+                    else {
+                        uavName = "UAV_" + std::to_string(i + 1);
+                    }
+                    // Gắn thêm tên đơn vị nếu muốn
+                    uavName = units[unitIdx].getUnitId() + " - " + uavName;
                 }
             }
             result.push_back(uavName);
