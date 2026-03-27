@@ -276,7 +276,7 @@ void UAVGAOptimizer::repair(AssignmentSolution& sol)
         while (!assigned.empty() && totalExplosive - assigned.front().explosive >= requiredExplosive)
         {
             std::sort(assigned.begin(), assigned.end(),
-                [](const UavAssign& a, const UavAssign& b) { return a.eff < b.eff; });
+                [](const UavAssign& a, const UavAssign& b) { return a.explosive < b.explosive; });
             int iRemove = assigned.front().i;
             totalExplosive -= assigned.front().explosive;
             sol.at(iRemove, j) = 0;

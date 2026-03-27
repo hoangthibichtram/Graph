@@ -72,7 +72,7 @@ namespace UAVCore {
         // (Lưu ý: Vì tôi chưa xem chi tiết UnitUAVList.h, mình tạm dùng index kiểu chuỗi)
         int unitCount = m_graph.getUnitList().getUnitCount();
         for (int i = 0; i < unitCount; ++i) {
-            std::string unitName = "SQ" + std::to_string(i + 1); // Giả lập ID đội (Ví dụ: SQ1, SQ2)
+            std::string unitName = "a" + std::to_string(i + 1); // Giả lập ID đội (Ví dụ: SQ1, SQ2)
             
             UnitDisplayState state;
             state.isVisible = true; // Mặc định bật tất cả
@@ -152,35 +152,10 @@ namespace UAVCore {
                 }
             }
 
-            // ===== KIỂM ĐỊNH LẠI CÁC TRẠM PHÒNG KHÔNG ĐÃ SẬP CHƯA =====
-            std::vector<int> activeDefenses;
             for (size_t j = 0; j < targets.size(); ++j) {
                 double killProb = 1.0 - targetMissProb[j];
-                // Phải so sánh đúng loại AirDefense
-                if (targets[j].typeVertex == "AirDefense" && killProb < 0.6) {
-                    activeDefenses.push_back((int)j);
-                }
-            }
-
-            // === TÍNH TỔNG SÁT THƯƠNG (CÓ TRỪ HAO BỊ CHI VIỆN) ===
-            for (size_t j = 0; j < targets.size(); ++j) {
-                double killProb = 1.0 - targetMissProb[j];
-                
-                if (targets[j].typeVertex != "AirDefense") {
-                    bool isProtected = false;
-                    for (int defJ : activeDefenses) {
-                        double dx = targets[j].x - targets[defJ].x;
-                        double dy = targets[j].y - targets[defJ].y;
-                        if (std::sqrt(dx*dx + dy*dy) <= 50.0) { // Bán kính radar 50
-                            isProtected = true; break;
-                        }
-                    }
-                    if (isProtected) killProb *= 0.5; // Giảm 50% sát thương nếu bị yểm trợ!
-                }
-
                 stats.targetDamagePercents[j] = (float)(killProb * 100.0);
                 stats.expectedDestroyedValue += (targets[j].value_usd * killProb);
-                
                 if (killProb > 0.5) stats.totalTargetsHit++;
             }
         }

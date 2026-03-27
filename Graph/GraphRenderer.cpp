@@ -60,13 +60,23 @@ void GraphRenderer::drawAssignment(HDC hdc, RECT clientRect)
         int unitIdx = assignment_.unitIndex[i];
         if (unitIdx < 0 || unitIdx >= (int)units.size()) continue;
 
-        COLORREF win32Color = RGB(255, 0, 0); 
-        if (m_engine != nullptr) {
-            std::string unitName = "SQ" + std::to_string(unitIdx + 1);
-            if (!m_engine->IsUnitVisible(unitName)) continue; 
-            UAVCore::RGBA coreColor = m_engine->GetUnitLineColor(unitName);
-            win32Color = RGB(static_cast<BYTE>(coreColor.r * 255), static_cast<BYTE>(coreColor.g * 255), static_cast<BYTE>(coreColor.b * 255));
+        COLORREF win32Color;
+        std::string unitName = "a" + std::to_string(unitIdx + 1);
+        if (m_engine && !m_engine->IsUnitVisible(unitName))
+            continue;  // Ẩn/hiện đúng như trước đây
+
+        // Set màu
+        if (unitIdx == 2) {
+            win32Color = RGB(255, 140, 0); // Cam cho a3
         }
+        else {
+            win32Color = RGB(255, 0, 0); // Mặc định
+            if (m_engine != nullptr) {
+                UAVCore::RGBA coreColor = m_engine->GetUnitLineColor(unitName);
+                win32Color = RGB(coreColor.r * 255, coreColor.g * 255, coreColor.b * 255);
+            }
+        }
+
 
         HPEN pen = CreatePen(PS_SOLID, 2, win32Color);
         HPEN oldPen = (HPEN)SelectObject(hdc, pen);
@@ -157,11 +167,21 @@ void GraphRenderer::draw(HDC hdc, RECT clientRect)
         SetBkMode(hdc, TRANSPARENT);
 
         for (int i = 0; i < unitCount; ++i) {
-            std::string unitName = "SQ" + std::to_string(i + 1);
+            std::string unitName = "a" + std::to_string(i + 1);
             
             bool isVisible = m_engine->IsUnitVisible(unitName);
-            UAVCore::RGBA coreColor = m_engine->GetUnitLineColor(unitName);
-            COLORREF c = RGB(coreColor.r * 255, coreColor.g * 255, coreColor.b * 255);
+            COLORREF c;
+
+            if (unitName == "a3") {
+                c = RGB(255, 140, 0); // Cam
+            }
+            else {
+                UAVCore::RGBA coreColor = m_engine->GetUnitLineColor(unitName);
+                c = RGB(coreColor.r * 255, coreColor.g * 255, coreColor.b * 255);
+            }
+
+            /*UAVCore::RGBA coreColor = m_engine->GetUnitLineColor(unitName);
+            COLORREF c = RGB(coreColor.r * 255, coreColor.g * 255, coreColor.b * 255);*/
 
             int yOffset = panelY + 10 + i * lineHeight;
 
@@ -206,8 +226,8 @@ void GraphRenderer::drawGraph(HDC hdc, RECT clientRect) {
     }
     SelectObject(hdc, hOldPen); DeleteObject(hPenEdge);
 
-    HPEN hPenV = CreatePen(PS_SOLID, 1, RGB(0, 0, 180));
-    HBRUSH hBrushV = CreateSolidBrush(RGB(100, 149, 237));
+    HPEN hPenV = CreatePen(PS_SOLID, 1, RGB(0, 0, 0));
+    HBRUSH hBrushV = CreateSolidBrush(RGB(0, 0, 0));
     hOldPen = (HPEN)SelectObject(hdc, hPenV);
     HGDIOBJ hOldBrush = SelectObject(hdc, hBrushV);
     for (const auto& v : graph_->GetVertices()) {
@@ -302,8 +322,8 @@ void GraphRenderer::drawUAVs(HDC hdc, RECT clientRect) {
 void GraphRenderer::drawTargets(HDC hdc, RECT clientRect) {
     if (!graph_) return;
     int w = clientRect.right - clientRect.left; int h = clientRect.bottom - clientRect.top;
-    HPEN hPen = CreatePen(PS_SOLID, 2, RGB(255, 0, 0));
-    HBRUSH hBrush = CreateSolidBrush(RGB(255, 200, 200));
+    HPEN hPen = CreatePen(PS_SOLID, 2, RGB(0, 0, 255));
+    HBRUSH hBrush = CreateSolidBrush(RGB(100, 149, 237));
     HPEN hOldPen = (HPEN)SelectObject(hdc, hPen);
     HBRUSH hOldBrush = (HBRUSH)SelectObject(hdc, hBrush);
     for (const auto& t : graph_->GetTargets()) {
@@ -312,6 +332,31 @@ void GraphRenderer::drawTargets(HDC hdc, RECT clientRect) {
         // Code mới để hiển thị Tên mục tiêu (Cột name trong file CSV)
         std::string label = t.name;
         TextOutA(hdc, p.x + 8, p.y - 8, label.c_str(), (int)label.size());
+    }
+    // Hiển thị dropdown UAV tấn công mục tiêu khi mục tiêu được chọn
+    if (selectedTargetIndex_ >= 0) {
+        auto uavList = getUAVsForTarget(selectedTargetIndex_);
+        if (!uavList.empty()) {
+            int lineH = 20;
+            int boxWidth = 130;
+            int boxHeight = (int)uavList.size() * lineH + 5;
+            POINT p = selectedTargetScreenPos_;
+            RECT dropRect = { p.x + 15, p.y + 10, p.x + 15 + boxWidth, p.y + 10 + boxHeight };
+            HBRUSH dropBrush = CreateSolidBrush(RGB(50, 60, 80));
+            FillRect(hdc, &dropRect, dropBrush);
+            HPEN borderPen = CreatePen(PS_SOLID, 1, RGB(200, 200, 200));
+            SelectObject(hdc, borderPen);
+            MoveToEx(hdc, dropRect.left, dropRect.top, NULL); LineTo(hdc, dropRect.right, dropRect.top);
+            LineTo(hdc, dropRect.right, dropRect.bottom); LineTo(hdc, dropRect.left, dropRect.bottom);
+            LineTo(hdc, dropRect.left, dropRect.top);
+            DeleteObject(borderPen);
+            DeleteObject(dropBrush);
+            SetTextColor(hdc, RGB(240, 240, 200));
+            for (int k = 0; k < (int)uavList.size(); ++k) {
+                std::string uavItem = "  -> UAV_" + uavList[k];
+                TextOutA(hdc, p.x + 20, p.y + 12 + k * lineH, uavItem.c_str(), (int)uavItem.size());
+            }
+        }
     }
     SelectObject(hdc, hOldBrush); SelectObject(hdc, hOldPen); DeleteObject(hBrush); DeleteObject(hPen);
 }
@@ -323,7 +368,7 @@ void GraphRenderer::resetView() { scale_ = 1.0; offsetX_ = 0; offsetY_ = 0; boun
 
 void GraphRenderer::drawPath(HDC hdc, const std::vector<int>& path, RECT clientRect) {
     if (!graph_ || path.size() < 2) return;
-    HPEN hPen = CreatePen(PS_SOLID, 3, RGB(255, 0, 0)); 
+    HPEN hPen = CreatePen(PS_SOLID, 3, RGB(25, 0, 0)); 
     HGDIOBJ oldPen = SelectObject(hdc, hPen);
     for (size_t k = 1; k < path.size(); ++k) {
         POINT pa = worldToScreen(graph_->GetVertexById(path[k - 1]).x, graph_->GetVertexById(path[k - 1]).y, clientRect);
@@ -358,7 +403,61 @@ bool GraphRenderer::handleUnitClick(int mouseX, int mouseY, RECT clientRect)
     
     selectedUnitIndex_ = -1; // Click ra ngoài không gian thì đóng danh sách
     return false;
-}///////////////////////////////////
+}
+bool GraphRenderer::handleTargetClick(int mouseX, int mouseY, RECT clientRect)
+{
+    if (!graph_) return false;
+    const auto& targets = graph_->GetTargets();
+    for (size_t i = 0; i < targets.size(); ++i) {
+        POINT p = worldToScreen(targets[i].x, targets[i].y, clientRect);
+        int dx = mouseX - p.x;
+        int dy = mouseY - p.y;
+        if (dx * dx + dy * dy <= 15 * 15) {
+            if (selectedTargetIndex_ == static_cast<int>(i)) {
+                selectedTargetIndex_ = -1;
+            }
+            else {
+                selectedTargetIndex_ = static_cast<int>(i);
+                selectedTargetScreenPos_ = p;
+            }
+            return true;
+        }
+    }
+    selectedTargetIndex_ = -1;
+    return false;
+}
+std::vector<std::string> GraphRenderer::getUAVsForTarget(int targetIdx) const
+{
+    std::vector<std::string> result;
+    if (!hasAssignment_ || !unitList_ || !graph_) return result;
+    int n = assignment_.nUavTypes;
+    int m = assignment_.nTargets;
+    if (targetIdx < 0 || targetIdx >= m) return result;
+
+    // Duyệt qua tất cả loại UAV
+    for (int i = 0; i < n; ++i) {
+        if (assignment_.at(i, targetIdx) > 0) {
+            // Lấy tên/mã UAV từ assignment (nếu có), hoặc tạo tên mặc định
+            std::string uavName = "UAV_" + std::to_string(i + 1);
+
+            // Nếu có unitList, lấy tên đơn vị và mã UAV
+            if (assignment_.unitIndex.size() > i && unitList_) {
+                int unitIdx = assignment_.unitIndex[i];
+                const auto& units = unitList_->getUnits();
+                if (unitIdx >= 0 && unitIdx < (int)units.size()) {
+                    const auto& uavs = units[unitIdx].getUAVs();
+                    // Tìm UAV có code trùng với assignment (nếu có)
+                    if (i < (int)uavs.size()) {
+                        uavName = uavs[i].getCode();
+                    }
+                }
+            }
+            result.push_back(uavName);
+        }
+    }
+    return result;
+}
+
 
 
 

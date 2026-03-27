@@ -37,7 +37,7 @@ LRESULT CALLBACK ChartWndProc(HWND hChart, UINT message, WPARAM wParam, LPARAM l
 
             SetBkMode(hdc, TRANSPARENT);
             SetTextColor(hdc, RGB(255, 255, 255));
-            TextOutA(hdc, 20, 20, "--- BIEU DO 100%: MUC DIET (DO) VA SONG SOT (XANH) THEO TUNG TRAM ---", 70);
+            TextOutA(hdc, 20, 20, "--- BIEU DO 100%: MUC TIEU DIET (DO) VA SONG SOT (XANH) THEO TUNG MUC TIEU ---", 70);
 
             // Vẽ trục X và Y
             HPEN axisPen = CreatePen(PS_SOLID, 2, RGB(200, 200, 200));
@@ -229,10 +229,10 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
     case WM_KEYDOWN: 
     {
         std::string unitToToggle = "";
-        if (wParam == '1') unitToToggle = "SQ1";
-        else if (wParam == '2') unitToToggle = "SQ2";
-        else if (wParam == '3') unitToToggle = "SQ3";
-        else if (wParam == '4') unitToToggle = "SQ4";
+        if (wParam == '1') unitToToggle = "a1";
+        else if (wParam == '2') unitToToggle = "a2";
+        else if (wParam == '3') unitToToggle = "a3";
+        else if (wParam == '4') unitToToggle = "a4";
 
         if (!unitToToggle.empty()) {
             bool currentState = g_engine.IsUnitVisible(unitToToggle);

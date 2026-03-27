@@ -45,7 +45,9 @@ public:
 
     // Thêm hàm này vào phần public
     bool handleUnitClick(int mouseX, int mouseY, RECT clientRect);
-
+    // GraphRenderer.h (thêm vào public:)
+    bool handleTargetClick(int mouseX, int mouseY, RECT clientRect);
+    std::vector<std::string> getUAVsForTarget(int targetIdx) const;
 private:
     const Graph* graph_;              // nguồn đồ thị (không sở hữu)
     const UnitUAVList* unitList_;     // danh sách đơn vị (không sở hữu)
@@ -77,4 +79,6 @@ private:
     UAVCore::UAVMissionEngine* m_engine = nullptr;
 
     int selectedUnitIndex_ = -1; // -1 nghĩa là đang không chọn Căn cứ nào
+    int selectedTargetIndex_ = -1; // Lưu index mục tiêu đang mở dropdown, -1 nếu không mở
+    POINT selectedTargetScreenPos_; // Lưu vị trí màn hình để vẽ dropdown
 };
