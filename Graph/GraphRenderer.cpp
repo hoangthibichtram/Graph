@@ -65,8 +65,20 @@ void GraphRenderer::drawAssignment(HDC hdc, RECT clientRect)
         if (m_engine && !m_engine->IsUnitVisible(unitName))
             continue;  // Ẩn/hiện đúng như trước đây
 
-        // Set màu
-        if (unitIdx == 2) {
+        // Lấy code UAV (nếu có)
+        std::string uavCode;
+        if (unitIdx >= 0 && unitIdx < (int)units.size()) {
+            const auto& uavs = units[unitIdx].getUAVs();
+            if (i < (int)uavs.size()) {
+                uavCode = uavs[i].getCode();
+            }
+        }
+
+        // Nếu là UAV trinh sát (code bắt đầu "a_A_") thì vẽ màu tím
+        if (!uavCode.empty() && uavCode.find("a_A_") == 0) {
+            win32Color = RGB(160, 32, 240); // Tím
+        }
+        else if (unitIdx == 2) {
             win32Color = RGB(255, 140, 0); // Cam cho a3
         }
         else {
@@ -76,7 +88,6 @@ void GraphRenderer::drawAssignment(HDC hdc, RECT clientRect)
                 win32Color = RGB(coreColor.r * 255, coreColor.g * 255, coreColor.b * 255);
             }
         }
-
 
         HPEN pen = CreatePen(PS_SOLID, 2, win32Color);
         HPEN oldPen = (HPEN)SelectObject(hdc, pen);
@@ -173,7 +184,7 @@ void GraphRenderer::draw(HDC hdc, RECT clientRect)
             COLORREF c;
 
             if (unitName == "a3") {
-                c = RGB(255, 140, 0); // Cam
+                c = RGB(255, 130, 0); // Cam
             }
             else {
                 UAVCore::RGBA coreColor = m_engine->GetUnitLineColor(unitName);

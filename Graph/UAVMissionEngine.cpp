@@ -209,12 +209,18 @@ namespace UAVCore {
         const auto& targets = m_problem.targets;
         const auto& assignment = m_bestSolution;
         int n = assignment.nUavTypes, m = assignment.nTargets;
+
         for (int i = 0; i < n; ++i) {
-            const auto& uav = uavs[i];
+            const UAVTypeOpt& uav = uavs[i];
+            bool isRecon = (uav.code.rfind("a_A", 0) == 0 && uav.explosive == 0);
             for (int j = 0; j < m; ++j) {
-                if (assignment.at(i, j) == 1) {
-                    os << "UAV " << uav.code << " (Đơn vị: " << uav.unitName
-                       << ") tấn công mục tiêu: " << targets[j].name << std::endl;
+                if (assignment.x[i * m + j] == 1) {
+                    if (isRecon) {
+                        os << "UAV " << uav.code << " (Don vi: " << uav.unitName << ") **trinh sát** mục tiêu: " << targets[j].name << std::endl;
+                    }
+                    else {
+                        os << "UAV " << uav.code << " (Don vi: " << uav.unitName << ") **tấn công** mục tiêu: " << targets[j].name << std::endl;
+                    }
                 }
             }
         }

@@ -37,7 +37,7 @@ static std::unordered_map<std::string, double> loadPij(const std::string& path)
         std::getline(ss, tgtIdStr, ',');
         std::getline(ss, pStr, ',');
 
-        // CHỖ SỬA QUAN TRỌNG NHẤT: Làm sạch mọi khoảng trắng thừa do lỗi đánh máy file CSV!
+        //  Làm sạch mọi khoảng trắng thừa do lỗi đánh máy file CSV!
         trim(uavCodeStr);
         trim(tgtIdStr);
         trim(pStr);
@@ -147,38 +147,46 @@ OptimizationProblem OptimizationBuilder::build(const UnitUAVList& unitList,
     AssignmentSolution best = ga.run();
 
     // RÀNG BUỘC: Cho phép nhiều UAV tấn công 1 mục tiêu nếu cần để đủ lượng nổ
+    // RÀNG BUỘC: Chọn tập UAV có tổng lượng nổ nhỏ nhất nhưng vẫn >= explosive_required
     for (int j = 0; j < m; ++j) {
-        double total_explosive = 0.0;
         std::vector<int> assignedUAVs;
-        // 1. Duyệt qua tất cả UAV đã được GA chọn cho mục tiêu này
         for (int i = 0; i < n; ++i) {
-            if (best.x[i * m + j] == 1) {
-                total_explosive += prob.uavs[i].explosive;
+            if (best.x[i * m + j] == 1 && prob.uavs[i].explosive > 0) {
                 assignedUAVs.push_back(i);
             }
         }
-        // 2. Nếu đã đủ lượng nổ, chỉ giữ lại các UAV đầu tiên sao cho tổng lượng nổ vừa đủ
-        if (total_explosive >= prob.targets[j].explosive_required) {
+
+        int k = (int)assignedUAVs.size();
+        double minSum = std::numeric_limits<double>::max();
+        std::vector<int> bestSubset;
+
+        // Duyệt tất cả tập con (2^k) của assignedUAVs
+        for (int mask = 1; mask < (1 << k); ++mask) {
             double sum = 0.0;
-            // Sắp xếp các UAV theo lượng nổ tăng dần để ưu tiên UAV nhỏ nhất
-            std::sort(assignedUAVs.begin(), assignedUAVs.end(), [&](int a, int b) {
-                return prob.uavs[a].explosive < prob.uavs[b].explosive;
-                });
-            for (int idx = 0; idx < assignedUAVs.size(); ++idx) {
-                int i = assignedUAVs[idx];
-                if (sum < prob.targets[j].explosive_required) {
-                    sum += prob.uavs[i].explosive;
-                }
-                else {
-                    best.x[i * m + j] = 0; // Loại bỏ UAV dư thừa
+            std::vector<int> subset;
+            for (int t = 0; t < k; ++t) {
+                if (mask & (1 << t)) {
+                    sum += prob.uavs[assignedUAVs[t]].explosive;
+                    subset.push_back(assignedUAVs[t]);
                 }
             }
+            if (sum >= prob.targets[j].explosive_required && sum < minSum) {
+                minSum = sum;
+                bestSubset = subset;
+            }
         }
-        else {
-            // Nếu chưa đủ lượng nổ, giữ nguyên các UAV đã phân bổ (có thể cần logic bổ sung để phân bổ thêm UAV nếu cần)
-            // Nếu muốn tự động phân bổ thêm UAV, cần bổ sung logic ở đây
+
+        // Đánh dấu lại các UAV được chọn, loại UAV dư thừa
+        for (int idx : assignedUAVs) {
+            if (std::find(bestSubset.begin(), bestSubset.end(), idx) != bestSubset.end()) {
+                best.x[idx * m + j] = 1;
+            }
+            else {
+                best.x[idx * m + j] = 0;
+            }
         }
     }
+   
 
     // chuẩn bị mảng paths trong best
     best.paths.resize(n, std::vector<std::vector<int>>(m));
@@ -186,29 +194,77 @@ OptimizationProblem OptimizationBuilder::build(const UnitUAVList& unitList,
     for (int i = 0; i < n; i++)
     {
         const UAVTypeOpt& uav = prob.uavs[i];
-
-        // 1) Lấy đơn vị chứa UAV i
         const UnitUAV& unit = unitList.getUnit(uav.unitIndex);
-
-        // 2) Tìm vertex gần nhất với đơn vị
         int startV = graph.findNearestVertex(unit.getX(), unit.getY());
 
-        for (int j = 0; j < m; j++)
+        bool isRecon = (uav.code.rfind("a_A",0) == 0 && uav.explosive == 0);
+
+        if (isRecon)
         {
-            if (best.x[i * m + j] != 1)
-                continue;
+            // 1. Lấy danh sách mục tiêu được phân công cho UAV trinh sát này
+            std::vector<std::pair<int, double>> assignedTargets; // (j, value)
+            for (int j = 0; j < m; j++)
+            {
+                if (best.x[i * m + j] == 1)
+                    assignedTargets.emplace_back(j, prob.targets[j].value);
+            }
+            std::sort(assignedTargets.begin(), assignedTargets.end(),
+                [](const std::pair<int, double>& a, const std::pair<int, double>& b) {
+                    return a.second > b.second;
+                });
 
-            // 3) Tìm vertex gần nhất với target j
-            int endV = prob.targets[j].vertexId;   // ⭐ DÙNG ĐÚNG VERTEX CỦA TARGET
+            int currentV = startV;
+            std::vector<int> allPath; // Lưu toàn bộ đường đi liền mạch
+            for (size_t idx = 0; idx < assignedTargets.size(); ++idx)
+            {
+                int j = assignedTargets[idx].first;
+                int endV = prob.targets[j].vertexId;
+                std::vector<int> path = graph.shortestPath(currentV, endV);
+                if (!path.empty()) {
+                    // Ghép đường đi liền mạch (tránh lặp lại điểm đầu)
+                    if (!allPath.empty()) path.erase(path.begin());
+                    allPath.insert(allPath.end(), path.begin(), path.end());
+                    currentV = path.back();
+                }
+                best.paths[i][j] = path;
+            }
 
-           /* int endV = graph.findNearestVertex(prob.targets[j].x,
-                prob.targets[j].y);*/
-
-            // 4) Tìm đường đi
-            std::vector<int> path = graph.shortestPath(startV, endV);
-
-            // 5) Lưu vào best.paths
-            best.paths[i][j] = std::move(path);
+             //ĐÁNH DẤU TẤT CẢ MỤC TIÊU MÀ UAV ĐI QUA LÀ ĐÃ TRINH SÁT
+            for (int j = 0; j < m; ++j) {
+                int tgtVertex = prob.targets[j].vertexId;
+                if (std::find(allPath.begin(), allPath.end(), tgtVertex) != allPath.end()) {
+                    best.x[i * m + j] = 1; // Đánh dấu là UAV này đã trinh sát mục tiêu j
+                }
+            }
+        }
+        else
+        {
+            // UAV tấn công: giữ nguyên logic cũ
+            for (int j = 0; j < m; j++)
+            {
+                if (best.x[i * m + j] != 1)
+                    continue;
+                int endV = prob.targets[j].vertexId;
+                std::vector<int> path = graph.shortestPath(startV, endV);
+                best.paths[i][j] = std::move(path);
+            }
+        }
+    }
+    // ràng buộc mỗi mt chỉ phân công cho 1 trinh sát
+    for (int j = 0; j < m; ++j) {
+        int reconIdx = -1;
+        for (int i = 0; i < n; ++i) {
+            const auto& uav = prob.uavs[i];
+            bool isRecon = (uav.code.rfind("a_A",0) == 0 && uav.explosive == 0);
+            if (isRecon && best.x[i * m + j] == 1) {
+                if (reconIdx == -1) {
+                    reconIdx = i;
+                }
+                else {
+                    best.x[i * m + j] = 0;
+                    best.paths[i][j].clear();
+                }
+            }
         }
     }
 
