@@ -1,6 +1,7 @@
 #include "OptimizationBuilder.h"
 #include "OptimizationProblem.h"
 #include "UAVOptimization.h" 
+#include <algorithm>
 #include <cmath>
 #include <fstream>
 #include <unordered_map>
@@ -144,6 +145,40 @@ OptimizationProblem OptimizationBuilder::build(const UnitUAVList& unitList,
 
     UAVGAOptimizer ga(prob, populationSize, maxGenerations, crossoverRate, mutationRate);
     AssignmentSolution best = ga.run();
+
+    // RÀNG BUỘC: Cho phép nhiều UAV tấn công 1 mục tiêu nếu cần để đủ lượng nổ
+    for (int j = 0; j < m; ++j) {
+        double total_explosive = 0.0;
+        std::vector<int> assignedUAVs;
+        // 1. Duyệt qua tất cả UAV đã được GA chọn cho mục tiêu này
+        for (int i = 0; i < n; ++i) {
+            if (best.x[i * m + j] == 1) {
+                total_explosive += prob.uavs[i].explosive;
+                assignedUAVs.push_back(i);
+            }
+        }
+        // 2. Nếu đã đủ lượng nổ, chỉ giữ lại các UAV đầu tiên sao cho tổng lượng nổ vừa đủ
+        if (total_explosive >= prob.targets[j].explosive_required) {
+            double sum = 0.0;
+            // Sắp xếp các UAV theo lượng nổ tăng dần để ưu tiên UAV nhỏ nhất
+            std::sort(assignedUAVs.begin(), assignedUAVs.end(), [&](int a, int b) {
+                return prob.uavs[a].explosive < prob.uavs[b].explosive;
+                });
+            for (int idx = 0; idx < assignedUAVs.size(); ++idx) {
+                int i = assignedUAVs[idx];
+                if (sum < prob.targets[j].explosive_required) {
+                    sum += prob.uavs[i].explosive;
+                }
+                else {
+                    best.x[i * m + j] = 0; // Loại bỏ UAV dư thừa
+                }
+            }
+        }
+        else {
+            // Nếu chưa đủ lượng nổ, giữ nguyên các UAV đã phân bổ (có thể cần logic bổ sung để phân bổ thêm UAV nếu cần)
+            // Nếu muốn tự động phân bổ thêm UAV, cần bổ sung logic ở đây
+        }
+    }
 
     // chuẩn bị mảng paths trong best
     best.paths.resize(n, std::vector<std::vector<int>>(m));
