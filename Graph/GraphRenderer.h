@@ -34,7 +34,7 @@ public:
 
     // Chuyển tọa độ thế giới -> màn hình
     POINT worldToScreen(double x, double y, RECT clientRect) const noexcept;
-    
+
 
     // Tính lại giới hạn (bounds) dựa trên dữ liệu đồ thị
     void calculateBounds();
@@ -66,10 +66,10 @@ private:
     static const double kZoomFactor;
     static const double kMinScale;
     static const double kMaxScale;
-     
+
     // Helpers nội bộ (cài đặt trong .cpp)
     void ensureBoundsCalculated();
-   
+
 
     POINT worldToScreenInternal(double x, double y, int w, int h) const noexcept;
 

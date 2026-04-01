@@ -2,7 +2,7 @@
 #include <vector>
 #include <string>
 
-class OptimizationProblem;   
+class OptimizationProblem;
 
 struct AssignmentSolution {
     int nUavTypes{};

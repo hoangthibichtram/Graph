@@ -89,7 +89,7 @@ namespace
     static inline char DetectDelimiter(const std::string& sample)
     {
         size_t c = std::count(sample.begin(), sample.end(), ',');
-        size_t s = std::count(sample.begin(),   sample.end(), ';');
+        size_t s = std::count(sample.begin(), sample.end(), ';');
         return (s > c) ? ';' : ',';
     }
 }
@@ -268,7 +268,7 @@ bool Graph::ReadEdgesFile(const std::string& path)
     // Duyệt tìm những đỉnh nào (như đỉnh 31) đang KHÔNG có bất kỳ Edge nào nối tới nó
     for (const auto& v : vertices_) {
         bool hasConnection = false;
-        
+
         // Kiểm tra xem có edge nào dính dáng tới v.id hay không
         for (const auto& e : edges_) {
             if (e.start.id == v.id || e.end.id == v.id) {
@@ -285,15 +285,16 @@ bool Graph::ReadEdgesFile(const std::string& path)
 
             for (const auto& other : vertices_) {
                 if (other.id == v.id) continue;
-                
+
                 double dx = v.x - other.x;
                 double dy = v.y - other.y;
-                double dist = std::sqrt(dx*dx + dy*dy);
+                double dist = std::sqrt(dx * dx + dy * dy);
 
                 if (dist < minDist1) {
                     minDist2 = minDist1; nearest2 = nearest1;
                     minDist1 = dist; nearest1 = other.id;
-                } else if (dist < minDist2) {
+                }
+                else if (dist < minDist2) {
                     minDist2 = dist; nearest2 = other.id;
                 }
             }
@@ -339,11 +340,11 @@ bool Graph::ReadTargetFile(const std::string& path)
         if (line[0] == '#' || line[0] == '/') continue;
 
         auto tok = ParseCsvLine(line, delim);
-        
+
         try
         {
             // MIỄN LÀ CÓ TỪ 9 CỘT TRỞ LÊN, CHÚNG TA ĐỀU LẤY VÀO (Chống gõ thiếu cột cuối)
-            if (tok.size() >= 9) 
+            if (tok.size() >= 9)
             {
                 Target t{};
                 // Dùng hàm try-catch nhỏ lẻ cho từng biến để nếu chết 1 ô X thì ko hỏng nguyên hàng
@@ -352,13 +353,13 @@ bool Graph::ReadTargetFile(const std::string& path)
                 t.target_id = (tok[2].empty()) ? 0 : std::stoi(tok[2]);
                 t.code = Trim(tok[3]);
                 t.name = Trim(tok[4]);
-                
+
                 t.altitude = (tok[5].empty()) ? 0.0f : std::stof(tok[5]);
                 t.explosize = (tok[6].empty()) ? 0.0f : std::stof(tok[6]);
                 t.value_usd = (tok[7].empty()) ? 0.0 : std::stod(tok[7]);
-                
+
                 // Ô CHỐT THÍ: ID_VERTEX LÀ CỘT THỨ 8 (Tính từ 0)
-                t.id_vertex = (tok[8].empty()) ? 0 : std::stoi(tok[8]); 
+                t.id_vertex = (tok[8].empty()) ? 0 : std::stoi(tok[8]);
 
                 // Nếu có ghi cột 9 thì lấy, ko thì mặc định là "target"
                 if (tok.size() >= 10 && !tok[9].empty()) t.typeVertex = Trim(tok[9]);
@@ -380,7 +381,7 @@ bool Graph::ReadTargetFile(const std::string& path)
                 std::cout << "[MẤT TARGET] Dòng nay qua ngan (chua toi 9 cot): " << line << "\n";
             }
         }
-        catch (...) { 
+        catch (...) {
             std::cout << "[BĂM CSV LỖI] Lỗi format chuỗi thành số tại dòng: " << line << "\n";
         }
     }
@@ -413,7 +414,7 @@ bool Graph::readAllData(const std::string& unitFile,
     if (!ReadEdgesFile(edgeFile)) success = false;
     if (!unitList.loadUnitsFromFile(unitFile)) success = false;
     unitList.loadUAVsFromPerUnitFiles(unitsFolder, uavPrefix, uavExt);
-    
+
     // Đọc Target File (Giờ ta sẽ ép nó phải đọc được!)
     if (!ReadTargetFile(targetFile)) success = false;
 
@@ -532,4 +533,4 @@ void Graph::removeVertexZero()
             idIndexMap_[vertices_[i].id] = static_cast<int>(i);
         }
     }
-}// xóa ở đây nha
+}

@@ -109,7 +109,7 @@ public:
     // Accessors
     const std::vector<Vertex>& GetVertices() const noexcept { return vertices_; }
     const std::vector<Edge>& GetEdges() const noexcept { return edges_; }
-   
+
     Vertex GetVertexById(int id) const;
 
     const std::vector<Target>& GetTargets() const noexcept { return targets_; }
@@ -121,7 +121,7 @@ public:
 
     // Find vertices within radius of point (x,y,z). Returns copies of matching vertices.
     std::vector<Vertex> findVerticesInRadius(double x, double y, double z, double radius) const;
-	//hàm tính khoảng cách giữa 2 vertex (dùng cho kiểm tra khi thêm vertex mới)
+    //hàm tính khoảng cách giữa 2 vertex (dùng cho kiểm tra khi thêm vertex mới)
     static double ComputeDistance(const Vertex& a, const Vertex& b)
     {
         double dx = a.x - b.x;
@@ -136,7 +136,7 @@ private:
     static inline uint64_t MakeEdgeKey(int from, int to) noexcept
     {
         return (static_cast<uint64_t>(static_cast<uint32_t>(from)) << 32)
-             | static_cast<uint32_t>(to);
+            | static_cast<uint32_t>(to);
     }
 
     // BỔ SUNG: Quản lý đơn vị

@@ -12,7 +12,7 @@ const double GraphRenderer::kMaxScale = 1e6;
 
 GraphRenderer::GraphRenderer() noexcept
     : graph_(nullptr), unitList_(nullptr), scale_(1.0), offsetX_(0), offsetY_(0),
-      minX_(0.0), maxX_(0.0), minY_(0.0), maxY_(0.0), boundsValid_(false)
+    minX_(0.0), maxX_(0.0), minY_(0.0), maxY_(0.0), boundsValid_(false)
 {
 }
 
@@ -135,7 +135,7 @@ void GraphRenderer::draw(HDC hdc, RECT clientRect)
     drawTargets(hdc, clientRect);
     drawAssignment(hdc, clientRect);
 
-	// VẼ BÁO CÁO PHÂN TÍCH CHIẾN DỊCH 
+    // VẼ BÁO CÁO PHÂN TÍCH CHIẾN DỊCH 
     if (m_engine != nullptr) {
         UAVCore::MissionStatistics stats = m_engine->GetMissionStatistics();
         std::wstring dashboardText = L"--- BAO CAO PHAN TICH CHIEN DICH ---\n";
@@ -165,9 +165,9 @@ void GraphRenderer::draw(HDC hdc, RECT clientRect)
 
     // VẼ BẢNG ĐIỀU KHIỂN (UNIT CHECKLIST) GÓC PHẢI MÀN HÌNH
     if (m_engine != nullptr && unitList_ != nullptr) {
-        int panelX = w - 180; 
+        int panelX = w - 180;
         int panelY = 10;
-        int lineHeight = 30;  
+        int lineHeight = 30;
         int unitCount = unitList_->getUnitCount();
 
         RECT uiRect = { panelX, panelY, w - 10, panelY + 15 + unitCount * lineHeight };
@@ -179,7 +179,7 @@ void GraphRenderer::draw(HDC hdc, RECT clientRect)
 
         for (int i = 0; i < unitCount; ++i) {
             std::string unitName = "a" + std::to_string(i + 1);
-            
+
             bool isVisible = m_engine->IsUnitVisible(unitName);
             COLORREF c;
 
@@ -197,14 +197,14 @@ void GraphRenderer::draw(HDC hdc, RECT clientRect)
             int yOffset = panelY + 10 + i * lineHeight;
 
             RECT boxRect = { panelX + 15, yOffset, panelX + 30, yOffset + 15 };
-            HBRUSH boxBrush = isVisible ? CreateSolidBrush(c) : CreateSolidBrush(RGB(100, 100, 100)); 
+            HBRUSH boxBrush = isVisible ? CreateSolidBrush(c) : CreateSolidBrush(RGB(100, 100, 100));
             FillRect(hdc, &boxRect, boxBrush);
             DeleteObject(boxBrush);
 
             std::wstring label = std::wstring(unitName.begin(), unitName.end());
             label += isVisible ? L" (Hien)" : L" (An)";
             SetTextColor(hdc, isVisible ? RGB(255, 255, 255) : RGB(150, 150, 150));
-            
+
             RECT textRect = { panelX + 40, yOffset - 2, w - 10, yOffset + lineHeight };
             DrawTextW(hdc, label.c_str(), -1, &textRect, DT_LEFT | DT_TOP);
         }
@@ -227,7 +227,7 @@ POINT GraphRenderer::worldToScreenInternal(double x, double y, int w, int h) con
 void GraphRenderer::drawGraph(HDC hdc, RECT clientRect) {
     if (!graph_) return;
     int w = clientRect.right - clientRect.left; int h = clientRect.bottom - clientRect.top;
-    
+
     HPEN hPenEdge = CreatePen(PS_SOLID, 1, RGB(0, 120, 0));
     HPEN hOldPen = (HPEN)SelectObject(hdc, hPenEdge);
     for (const auto& e : graph_->GetEdges()) {
@@ -242,16 +242,16 @@ void GraphRenderer::drawGraph(HDC hdc, RECT clientRect) {
     hOldPen = (HPEN)SelectObject(hdc, hPenV);
     HGDIOBJ hOldBrush = SelectObject(hdc, hBrushV);
     for (const auto& v : graph_->GetVertices()) {
-       
-        if (v.id == 0 || v.id >= 10000) continue; 
-        
+
+        if (v.id == 0 || v.id >= 10000) continue;
+
         POINT p = worldToScreenInternal(v.x, v.y, w, h);
         Ellipse(hdc, p.x - 4, p.y - 4, p.x + 4, p.y + 4);
-        
+
         std::string s = std::to_string(v.id);
         TextOutA(hdc, p.x + 6, p.y - 6, s.c_str(), (int)s.size());
     }
-    
+
     SelectObject(hdc, hOldBrush); SelectObject(hdc, hOldPen);
     DeleteObject(hBrushV); DeleteObject(hPenV);
 }
@@ -259,25 +259,25 @@ void GraphRenderer::drawGraph(HDC hdc, RECT clientRect) {
 void GraphRenderer::drawUnits(HDC hdc, RECT clientRect) {
     if (!unitList_) return;
     int w = clientRect.right - clientRect.left; int h = clientRect.bottom - clientRect.top;
-    
+
     HPEN hPen = CreatePen(PS_SOLID, 1, RGB(180, 30, 30));
     HBRUSH hBrush = CreateSolidBrush(RGB(240, 128, 128));
     HPEN hOldPen = (HPEN)SelectObject(hdc, hPen);
     HGDIOBJ hOldBrush = SelectObject(hdc, hBrush);
-    
+
     const auto& units = unitList_->getUnits();
-    
+
     for (size_t i = 0; i < units.size(); ++i) {
         const auto& u = units[i];
         POINT p = worldToScreenInternal(u.getX(), u.getY(), w, h);
-        
+
         POINT pts[3] = { {p.x, p.y - 8}, {p.x - 8, p.y + 8}, {p.x + 8, p.y + 8} };
         Polygon(hdc, pts, 3);
-       
+
         std::string label = u.getUnitId();
-            
+
         SetBkMode(hdc, TRANSPARENT);
-        SetTextColor(hdc, RGB(30,30,30));
+        SetTextColor(hdc, RGB(30, 30, 30));
         TextOutA(hdc, p.x + 10, p.y - 10, label.c_str(), (int)label.size());
 
         // NẾU ĐƠN VỊ ĐANG ĐƯỢC CLICK (XỔ MENU DROPDOWN)
@@ -286,11 +286,11 @@ void GraphRenderer::drawUnits(HDC hdc, RECT clientRect) {
             int lineH = 20;
             int boxWidth = 130; // Kéo rộng thêm 1 chút cho chữ đẹp
             int boxHeight = uavCount * lineH + 5;
-            
+
             RECT dropRect = { p.x + 15, p.y + 10, p.x + 15 + boxWidth, p.y + 10 + boxHeight };
             HBRUSH dropBrush = CreateSolidBrush(RGB(50, 50, 60));
             FillRect(hdc, &dropRect, dropBrush);
-            
+
             HPEN borderPen = CreatePen(PS_SOLID, 1, RGB(200, 200, 200));
             SelectObject(hdc, borderPen);
             MoveToEx(hdc, dropRect.left, dropRect.top, NULL); LineTo(hdc, dropRect.right, dropRect.top);
@@ -298,9 +298,9 @@ void GraphRenderer::drawUnits(HDC hdc, RECT clientRect) {
             LineTo(hdc, dropRect.left, dropRect.top);
             DeleteObject(borderPen);
             DeleteObject(dropBrush);
-            
+
             SetTextColor(hdc, RGB(240, 240, 200));
-            
+
             // 2. CẬP NHẬT DANH SÁCH UAV BẰNG MÃ CODE (A1, B1...)
             const auto& myUAVs = u.getUAVs();
             for (int k = 0; k < uavCount; ++k) {
@@ -310,8 +310,8 @@ void GraphRenderer::drawUnits(HDC hdc, RECT clientRect) {
             }
         }
     }
-    
-    SelectObject(hdc, hOldBrush); SelectObject(hdc, hOldPen); 
+
+    SelectObject(hdc, hOldBrush); SelectObject(hdc, hOldPen);
     DeleteObject(hBrush); DeleteObject(hPen);
 }
 
@@ -319,7 +319,7 @@ void GraphRenderer::drawUAVs(HDC hdc, RECT clientRect) {
     if (!unitList_) return;
     int w = clientRect.right - clientRect.left; int h = clientRect.bottom - clientRect.top;
     HPEN hPen = CreatePen(PS_SOLID, 1, RGB(0, 0, 0));
-    HBRUSH hBrush = CreateSolidBrush(RGB(255, 255, 0)); 
+    HBRUSH hBrush = CreateSolidBrush(RGB(255, 255, 0));
     HPEN hOldPen = (HPEN)SelectObject(hdc, hPen);
     HBRUSH hOldBrush = (HBRUSH)SelectObject(hdc, hBrush);
     for (const auto& unit : unitList_->getUnits()) {
@@ -379,7 +379,7 @@ void GraphRenderer::resetView() { scale_ = 1.0; offsetX_ = 0; offsetY_ = 0; boun
 
 void GraphRenderer::drawPath(HDC hdc, const std::vector<int>& path, RECT clientRect) {
     if (!graph_ || path.size() < 2) return;
-    HPEN hPen = CreatePen(PS_SOLID, 3, RGB(25, 0, 0)); 
+    HPEN hPen = CreatePen(PS_SOLID, 3, RGB(25, 0, 0));
     HGDIOBJ oldPen = SelectObject(hdc, hPen);
     for (size_t k = 1; k < path.size(); ++k) {
         POINT pa = worldToScreen(graph_->GetVertexById(path[k - 1]).x, graph_->GetVertexById(path[k - 1]).y, clientRect);
@@ -392,26 +392,27 @@ void GraphRenderer::drawPath(HDC hdc, const std::vector<int>& path, RECT clientR
 bool GraphRenderer::handleUnitClick(int mouseX, int mouseY, RECT clientRect)
 {
     if (!unitList_) return false;
-    
+
     // Quét qua các căn cứ để xem click chuột có trúng tọa độ của nó trên màn hình không
     const auto& units = unitList_->getUnits();
     for (size_t i = 0; i < units.size(); ++i) {
         POINT p = worldToScreen(units[i].getX(), units[i].getY(), clientRect);
-        
+
         // Tính khoảng cách từ chuột tới căn cứ (vùng Hitbox bán kính tầm 15 pixel)
         int dx = mouseX - p.x;
         int dy = mouseY - p.y;
         if (dx * dx + dy * dy <= 15 * 15) {
             // Nếu click trúng trạm đang mở -> Tắt nó đi. Nếu click trạm khác -> Mở trạm đó lên.
             if (selectedUnitIndex_ == static_cast<int>(i)) {
-                selectedUnitIndex_ = -1; 
-            } else {
+                selectedUnitIndex_ = -1;
+            }
+            else {
                 selectedUnitIndex_ = static_cast<int>(i);
             }
             return true; // Trả về true báo hiệu đã trúng
         }
     }
-    
+
     selectedUnitIndex_ = -1; // Click ra ngoài không gian thì đóng danh sách
     return false;
 }

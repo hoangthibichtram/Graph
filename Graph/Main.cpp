@@ -10,7 +10,7 @@ UAVCore::UAVMissionEngine g_engine;
 GraphRenderer g_renderer;
 HINSTANCE hInst;                                // current instance 
 WCHAR szTitle[MAX_LOADSTRING];                  // The title bar text
-WCHAR szWindowClass[MAX_LOADSTRING]; 
+WCHAR szWindowClass[MAX_LOADSTRING];
 HWND hWnd;
 
 // Forward declarations:
@@ -25,101 +25,101 @@ LRESULT CALLBACK ChartWndProc(HWND hChart, UINT message, WPARAM wParam, LPARAM l
     switch (message)
     {
     case WM_PAINT:
-        {
-            PAINTSTRUCT ps;
-            HDC hdc = BeginPaint(hChart, &ps);
+    {
+        PAINTSTRUCT ps;
+        HDC hdc = BeginPaint(hChart, &ps);
 
-            RECT rect;
-            GetClientRect(hChart, &rect);
-            HBRUSH bgBrush = CreateSolidBrush(RGB(40, 40, 40));
-            FillRect(hdc, &rect, bgBrush);
-            DeleteObject(bgBrush);
+        RECT rect;
+        GetClientRect(hChart, &rect);
+        HBRUSH bgBrush = CreateSolidBrush(RGB(40, 40, 40));
+        FillRect(hdc, &rect, bgBrush);
+        DeleteObject(bgBrush);
 
-            SetBkMode(hdc, TRANSPARENT);
-            SetTextColor(hdc, RGB(255, 255, 255));
-            TextOutA(hdc, 20, 20, "--- BIEU DO 100%: MUC TIEU DIET (DO) VA SONG SOT (XANH) THEO TUNG MUC TIEU ---", 70);
+        SetBkMode(hdc, TRANSPARENT);
+        SetTextColor(hdc, RGB(255, 255, 255));
+        TextOutA(hdc, 20, 20, "--- BIEU DO 100%: MUC TIEU DIET (DO) VA SONG SOT (XANH) THEO TUNG MUC TIEU ---", 70);
 
-            // Vẽ trục X và Y
-            HPEN axisPen = CreatePen(PS_SOLID, 2, RGB(200, 200, 200));
-            SelectObject(hdc, axisPen);
-            
-            // Lùi trục X lên cao chút dể lấy nhiều đất cho chữ zíc zắc
-            int startX = 60, startY = rect.bottom - 80; 
-            int maxH = startY - 60; // Chiều cao tuyệt đối của một cột 100%
-            if (maxH < 50) maxH = 50;
+        // Vẽ trục X và Y
+        HPEN axisPen = CreatePen(PS_SOLID, 2, RGB(200, 200, 200));
+        SelectObject(hdc, axisPen);
 
-            MoveToEx(hdc, startX, startY, nullptr); LineTo(hdc, rect.right - 20, startY); // Trục X
-            MoveToEx(hdc, startX, startY, nullptr); LineTo(hdc, startX, 40); // Trục Y
-            DeleteObject(axisPen);
+        // Lùi trục X lên cao chút dể lấy nhiều đất cho chữ zíc zắc
+        int startX = 60, startY = rect.bottom - 80;
+        int maxH = startY - 60; // Chiều cao tuyệt đối của một cột 100%
+        if (maxH < 50) maxH = 50;
 
-            UAVCore::MissionStatistics stats = g_engine.GetMissionStatistics();
-            int barWidth = 40;
-            int gap = 60; // Nới rộng khoảng cách giữa các cột ra!
+        MoveToEx(hdc, startX, startY, nullptr); LineTo(hdc, rect.right - 20, startY); // Trục X
+        MoveToEx(hdc, startX, startY, nullptr); LineTo(hdc, startX, 40); // Trục Y
+        DeleteObject(axisPen);
 
-            HBRUSH redBrush = CreateSolidBrush(RGB(220, 40, 40));   // ĐỎ là Tiêu diệt
-            HBRUSH greenBrush = CreateSolidBrush(RGB(40, 200, 40)); // XANH là Sống sót
+        UAVCore::MissionStatistics stats = g_engine.GetMissionStatistics();
+        int barWidth = 40;
+        int gap = 60; // Nới rộng khoảng cách giữa các cột ra!
 
-            for (size_t i = 0; i < stats.targetDamagePercents.size(); ++i) {
-                int rectLeft = startX + 30 + i * (barWidth + gap);
-                int rectRight = rectLeft + barWidth;
-                
-                // Mức sát thương (Màu đỏ, Vẽ từ dưới đáy đi lên)
-                float dmgPercent = stats.targetDamagePercents[i];
-                if (dmgPercent < 0) dmgPercent = 0;
-                if (dmgPercent > 100) dmgPercent = 100;
-                float survPercent = 100.0f - dmgPercent;
+        HBRUSH redBrush = CreateSolidBrush(RGB(220, 40, 40));   // ĐỎ là Tiêu diệt
+        HBRUSH greenBrush = CreateSolidBrush(RGB(40, 200, 40)); // XANH là Sống sót
 
-                int redH = (int)((dmgPercent / 100.0f) * maxH);
-                int greenH = maxH - redH; // Phần còn lại là màu xanh
+        for (size_t i = 0; i < stats.targetDamagePercents.size(); ++i) {
+            int rectLeft = startX + 30 + i * (barWidth + gap);
+            int rectRight = rectLeft + barWidth;
 
-                int redTop = startY - redH;
-                int greenTop = redTop - greenH;
+            // Mức sát thương (Màu đỏ, Vẽ từ dưới đáy đi lên)
+            float dmgPercent = stats.targetDamagePercents[i];
+            if (dmgPercent < 0) dmgPercent = 0;
+            if (dmgPercent > 100) dmgPercent = 100;
+            float survPercent = 100.0f - dmgPercent;
 
-                // 1. Phết màu Đỏ cho Khúc dưới (Sát thương)
-                if (redH > 0) {
-                    RECT barDmg = { rectLeft, redTop, rectRight, startY - 1 };
-                    FillRect(hdc, &barDmg, redBrush);
-                }
+            int redH = (int)((dmgPercent / 100.0f) * maxH);
+            int greenH = maxH - redH; // Phần còn lại là màu xanh
 
-                // 2. Phết màu Xanh cho Khúc trên (Sống sót) chồng ngay trên Đỏ
-                if (greenH > 0) {
-                    RECT barSurv = { rectLeft, greenTop, rectRight, redTop };
-                    FillRect(hdc, &barSurv, greenBrush);
-                }
+            int redTop = startY - redH;
+            int greenTop = redTop - greenH;
 
-                // 3. Viết Nhãn % nằm TRONG CỘT để dễ nhìn
-                int centerTextX = rectLeft + 5;
-                if (redH > 15) {
-                    std::string rTxt = std::to_string((int)(dmgPercent + 0.5f)) + "%";
-                    SetTextColor(hdc, RGB(255, 255, 255));
-                    TextOutA(hdc, centerTextX, startY - (redH/2) - 8, rTxt.c_str(), (int)rTxt.size());
-                }
-                if (greenH > 15) {
-                    std::string gTxt = std::to_string((int)(survPercent + 0.5f)) + "%";
-                    SetTextColor(hdc, RGB(30, 30, 30)); // Chữ Tối trên nền Xanh sáng
-                    TextOutA(hdc, centerTextX, redTop - (greenH/2) - 8, gTxt.c_str(), (int)gTxt.size());
-                }
-
-                // Tên mục tiêu ở chân cột, VẼ ZÍC-ZẮC thò thụt để ko bị đè chữ
-                SetTextColor(hdc, RGB(255, 255, 255));
-                std::string tName = stats.targetNames[i];
-                
-                // Nếu cột lẻ (1, 3, 5..) thì chữ tụt xuống 20 pixel, cột chẵn úp sát vạch
-                int textY = startY + 5;
-                if (i % 2 != 0) textY += 20; 
-
-                TextOutA(hdc, rectLeft - 10, textY, tName.c_str(), (int)tName.size());
+            // 1. Phết màu Đỏ cho Khúc dưới (Sát thương)
+            if (redH > 0) {
+                RECT barDmg = { rectLeft, redTop, rectRight, startY - 1 };
+                FillRect(hdc, &barDmg, redBrush);
             }
 
-            DeleteObject(redBrush);
-            DeleteObject(greenBrush);
+            // 2. Phết màu Xanh cho Khúc trên (Sống sót) chồng ngay trên Đỏ
+            if (greenH > 0) {
+                RECT barSurv = { rectLeft, greenTop, rectRight, redTop };
+                FillRect(hdc, &barSurv, greenBrush);
+            }
 
-            EndPaint(hChart, &ps);
+            // 3. Viết Nhãn % nằm TRONG CỘT để dễ nhìn
+            int centerTextX = rectLeft + 5;
+            if (redH > 15) {
+                std::string rTxt = std::to_string((int)(dmgPercent + 0.5f)) + "%";
+                SetTextColor(hdc, RGB(255, 255, 255));
+                TextOutA(hdc, centerTextX, startY - (redH / 2) - 8, rTxt.c_str(), (int)rTxt.size());
+            }
+            if (greenH > 15) {
+                std::string gTxt = std::to_string((int)(survPercent + 0.5f)) + "%";
+                SetTextColor(hdc, RGB(30, 30, 30)); // Chữ Tối trên nền Xanh sáng
+                TextOutA(hdc, centerTextX, redTop - (greenH / 2) - 8, gTxt.c_str(), (int)gTxt.size());
+            }
+
+            // Tên mục tiêu ở chân cột, VẼ ZÍC-ZẮC thò thụt để ko bị đè chữ
+            SetTextColor(hdc, RGB(255, 255, 255));
+            std::string tName = stats.targetNames[i];
+
+            // Nếu cột lẻ (1, 3, 5..) thì chữ tụt xuống 20 pixel, cột chẵn úp sát vạch
+            int textY = startY + 5;
+            if (i % 2 != 0) textY += 20;
+
+            TextOutA(hdc, rectLeft - 10, textY, tName.c_str(), (int)tName.size());
         }
-        break;
+
+        DeleteObject(redBrush);
+        DeleteObject(greenBrush);
+
+        EndPaint(hChart, &ps);
+    }
+    break;
 
     case WM_CLOSE:
-        DestroyWindow(hChart); 
+        DestroyWindow(hChart);
         return 0; // Tránh báo quit toàn bộ chương trình
 
     default:
@@ -149,18 +149,18 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
     if (!InitInstance(hInstance, nCmdShow)) return FALSE;
 
     std::string dataPath = "D:\\VS_Prj\\Graph\\x64\\Debug\\Data";
-    
+
     g_engine.SetLogger([](const std::string& logMessage) {
         std::cout << ">>> " << logMessage << std::endl;
-    });
+        });
 
-    if (g_engine.InitEngineFromDirectory(dataPath)) 
+    if (g_engine.InitEngineFromDirectory(dataPath))
     {
         g_engine.RunOptimization();
         g_renderer.setGraph(g_engine.GetGraph());
         g_renderer.setUnitList(g_engine.GetGraph().getUnitList());
         g_renderer.setAssignment(g_engine.GetBestSolution());
-        g_renderer.setEngine(&g_engine); 
+        g_renderer.setEngine(&g_engine);
         g_renderer.resetView();
         g_engine.PrintAssignmentReport();
 
@@ -226,7 +226,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 {
     switch (message)
     {
-    case WM_KEYDOWN: 
+    case WM_KEYDOWN:
     {
         std::string unitToToggle = "";
         if (wParam == '1') unitToToggle = "a1";
@@ -241,15 +241,15 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
         }
 
         // BẤM PHÍM 'C' HOẶC 'c' ĐỂ MỞ BIỂU ĐỒ
-        if (wParam == 'C' || wParam == 'c') { 
-            HWND hChart = CreateWindowW(L"ChartWindow", L"Dashboard: Bieu Do Thiet Hai Quan Dich", 
-                WS_OVERLAPPEDWINDOW | WS_VISIBLE, 150, 150, 700, 450, 
+        if (wParam == 'C' || wParam == 'c') {
+            HWND hChart = CreateWindowW(L"ChartWindow", L"Dashboard: Bieu Do Thiet Hai Quan Dich",
+                WS_OVERLAPPEDWINDOW | WS_VISIBLE, 150, 150, 700, 450,
                 nullptr, nullptr, hInst, nullptr);
             UpdateWindow(hChart);
         }
     }
     break;
-    
+
     case WM_PAINT:
     {
         PAINTSTRUCT ps;
@@ -289,7 +289,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 
         if (g_renderer.handleUnitClick(x, y, clientRect)) {
             InvalidateRect(hWnd, NULL, TRUE);
-            break; 
+            break;
         }
     }
     break;

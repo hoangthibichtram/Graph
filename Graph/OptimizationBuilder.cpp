@@ -73,12 +73,12 @@ OptimizationProblem OptimizationBuilder::build(const UnitUAVList& unitList,
         TargetOpt to;
         to.id = t.target_id;
         to.code = t.code;
-        to.name = t.name;           
+        to.name = t.name;
         to.value = t.value_usd;
         to.x = t.x;
         to.y = t.y;
-        to.vertexId = t.id_vertex;   
-        to.type = t.typeVertex;      
+        to.vertexId = t.id_vertex;
+        to.type = t.typeVertex;
         to.explosive_required = t.explosize; // Sử dụng đúng tên trường trong struct Target // <-- Gán lượng nổ cần thiết từ dữ liệu gốc
         prob.targets.push_back(to);
         // DEBUG TARGET
@@ -103,7 +103,7 @@ OptimizationProblem OptimizationBuilder::build(const UnitUAVList& unitList,
             // GA parameters (Nguyên bản của bạn, không đổi cost trinh sát gì hết)
             opt.costPerAttack = u.getCostUsd();
             opt.maxBudget = u.getCostUsd() * 3;   // ví dụ: mỗi UAV được dùng tối đa 5 lần
-            opt.maxCount = 1; 
+            opt.maxCount = 1;
 
             opt.unitIndex = unitList.getUnitIndex(unit.getUnitId());
             opt.unitName = unit.getUnitName();
@@ -130,9 +130,10 @@ OptimizationProblem OptimizationBuilder::build(const UnitUAVList& unitList,
             std::string key = uav.code + "|" + std::to_string(prob.targets[j].id);
             if (pijMap.count(key)) {
                 uav.pij[j] = pijMap[key];
-            } else {
-              // NẾU GẶP MỤC TIÊU LẠ KHÔNG CÓ TRONG FILE PROBABILITY, GÁN TỶ LỆ TRÚNG 50%
-                uav.pij[j] = 0.0; 
+            }
+            else {
+                // NẾU GẶP MỤC TIÊU LẠ KHÔNG CÓ TRONG FILE PROBABILITY, GÁN TỶ LỆ TRÚNG 50%
+                uav.pij[j] = 0.0;
             }
         }
     }
@@ -186,7 +187,7 @@ OptimizationProblem OptimizationBuilder::build(const UnitUAVList& unitList,
             }
         }
     }
-   
+
 
     // chuẩn bị mảng paths trong best
     best.paths.resize(n, std::vector<std::vector<int>>(m));
@@ -197,7 +198,7 @@ OptimizationProblem OptimizationBuilder::build(const UnitUAVList& unitList,
         const UnitUAV& unit = unitList.getUnit(uav.unitIndex);
         int startV = graph.findNearestVertex(unit.getX(), unit.getY());
 
-        bool isRecon = (uav.code.rfind("a_A",0) == 0 && uav.explosive == 0);
+        bool isRecon = (uav.code.rfind("a_A", 0) == 0 && uav.explosive == 0);
 
         if (isRecon)
         {
@@ -229,7 +230,7 @@ OptimizationProblem OptimizationBuilder::build(const UnitUAVList& unitList,
                 best.paths[i][j] = path;
             }
 
-             //ĐÁNH DẤU TẤT CẢ MỤC TIÊU MÀ UAV ĐI QUA LÀ ĐÃ TRINH SÁT
+            //ĐÁNH DẤU TẤT CẢ MỤC TIÊU MÀ UAV ĐI QUA LÀ ĐÃ TRINH SÁT
             for (int j = 0; j < m; ++j) {
                 int tgtVertex = prob.targets[j].vertexId;
                 if (std::find(allPath.begin(), allPath.end(), tgtVertex) != allPath.end()) {
@@ -255,7 +256,7 @@ OptimizationProblem OptimizationBuilder::build(const UnitUAVList& unitList,
         int reconIdx = -1;
         for (int i = 0; i < n; ++i) {
             const auto& uav = prob.uavs[i];
-            bool isRecon = (uav.code.rfind("a_A",0) == 0 && uav.explosive == 0);
+            bool isRecon = (uav.code.rfind("a_A", 0) == 0 && uav.explosive == 0);
             if (isRecon && best.x[i * m + j] == 1) {
                 if (reconIdx == -1) {
                     reconIdx = i;

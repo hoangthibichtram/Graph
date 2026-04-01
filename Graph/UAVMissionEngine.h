@@ -32,13 +32,13 @@ namespace UAVCore {
 
     // Gói dữ liệu Kết quả thuật toán để báo cáo lên Biểu đồ (Dashboard)
     struct MissionStatistics {
-        double totalTargetValue = 0.0;          
-        double expectedDestroyedValue = 0.0;    
-        double ourLossCost = 0.0;               
-        int totalUAVDeployed = 0;               
-        int totalTargetsHit = 0;                
-        float successRate = 0.0f;               
-        
+        double totalTargetValue = 0.0;
+        double expectedDestroyedValue = 0.0;
+        double ourLossCost = 0.0;
+        int totalUAVDeployed = 0;
+        int totalTargetsHit = 0;
+        float successRate = 0.0f;
+
         // --- 2 DÒNG MỚI ĐỂ VẼ BIỂU ĐỒ ---
         std::vector<float> targetDamagePercents; // Lấp đầy % sát thương từng mục tiêu
         std::vector<std::string> targetNames;    // Tên các mục tiêu theo thứ tự
@@ -89,7 +89,7 @@ namespace UAVCore {
         void PrintLog(const std::string& msg);
 
         // Tự động giăng dây đường bay cho các căn cứ (Bạn mới thêm)
-        void ConnectUnitsToGraph(); 
+        void ConnectUnitsToGraph();
 
         Graph m_graph;
         OptimizationProblem m_problem;

@@ -8,8 +8,8 @@
 // Local helpers (consistent with other CSV readers)
 namespace
 {
-    
-    
+
+
 
 
     static inline std::string Trim(const std::string& s)
@@ -132,7 +132,7 @@ bool UnitUAVList::loadUnitsFromFile(const std::string& path)
             if (it != hidx.end()) return static_cast<int>(it->second);
         }
         return -1;
-    };
+        };
 
     int idxUnitId = get({ "unit_id","unitid","id" });
     int idxUnitName = get({ "unit_name","name","unitname" });
@@ -145,7 +145,7 @@ bool UnitUAVList::loadUnitsFromFile(const std::string& path)
     while (std::getline(ifs, line))
     {
         RemoveUTF8BOM(line);
-        line = Trim(line);   
+        line = Trim(line);
         if (line.empty()) continue;
         if (line[0] == '#' || line[0] == '/') continue;
 

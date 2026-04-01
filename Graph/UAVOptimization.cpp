@@ -214,7 +214,7 @@ void UAVGAOptimizer::repair(AssignmentSolution& sol)
 
         for (int j = 0; j < m; ++j)
         {
-       
+
             if (sol.at(i, j) == 1)
             {
 
@@ -223,7 +223,7 @@ void UAVGAOptimizer::repair(AssignmentSolution& sol)
 
                 double vj = prob_.targets[j].value;
                 double pij = prob_.uavs[i].pij[j];
-                
+
                 // Tránh lỗi chia cho 0 nếu cost = 0, nếu cost bằng 0 thì ta cho hiệu suất cao (ví dụ vj * pij)
                 double e = (cost > 0 ? (vj * pij) / cost : (vj * pij));
 
@@ -303,7 +303,7 @@ AssignmentSolution UAVGAOptimizer::run()
             AssignmentSolution p2 = selectParent();
             AssignmentSolution child = crossover(p1, p2);
             mutate(child);
-            repair(child); 
+            repair(child);
             evaluate(child);
             newPop.push_back(child);
 
