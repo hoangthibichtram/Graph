@@ -30,5 +30,5 @@ private:
     std::vector<UnitUAV> units_;
     std::unordered_map<std::string, size_t> unit_index_map_;
     std::vector<UnitUAV>& getUnitsRef() { return units_; }
-
+   
 };

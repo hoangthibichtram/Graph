@@ -533,4 +533,4 @@ void Graph::removeVertexZero()
             idIndexMap_[vertices_[i].id] = static_cast<int>(i);
         }
     }
-}
+}// xóa ở đây nha
