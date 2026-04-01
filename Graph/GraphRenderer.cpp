@@ -141,15 +141,15 @@ void GraphRenderer::draw(HDC hdc, RECT clientRect)
         std::wstring dashboardText = L"--- BAO CAO PHAN TICH CHIEN DICH ---\n";
 
         dashboardText += L"[1] Tong gia tri muc tieu quan dich (Diem Max): " + std::to_wstring((int)stats.totalTargetValue) + L" $\n";
-        dashboardText += L"[2] Uoc tinh sat thuong gay ra (Ky vong Pij): " + std::to_wstring((int)stats.expectedDestroyedValue) + L" $\n";
+        dashboardText += L"[2] Uoc tinh ton that gay ra cho dich (Ky vong Pij): " + std::to_wstring((int)stats.expectedDestroyedValue) + L" $\n";
         dashboardText += L"[3] Chi phi trien khai luc luong (Gia UAV): " + std::to_wstring((int)stats.ourLossCost) + L" $\n";
 
         int netProfit = (int)(stats.expectedDestroyedValue - stats.ourLossCost);
         std::wstring profitStatus = (netProfit > 0) ? L" (LAI)" : L" (LO)";
         dashboardText += L"[4] Loi nhuan/Thiet hai: " + std::to_wstring(netProfit) + L" $" + profitStatus + L"\n";
-        dashboardText += L"[5] Muc do tieu diet Can cu Dich: " + std::to_wstring((int)stats.successRate) + L" %\n";
+        dashboardText += L"[5] Muc do tieu diet can cu Dich: " + std::to_wstring((int)stats.successRate) + L" %\n";
         dashboardText += L"[6] So diem muc tieu da danh: " + std::to_wstring(stats.totalTargetsHit) + L"\n";
-        dashboardText += L"[7] Tong UAV tham chien: " + std::to_wstring(stats.totalUAVDeployed) + L" UAV.\n";
+        dashboardText += L"[7] Tong UAV tham gia: " + std::to_wstring(stats.totalUAVDeployed) + L" UAV.\n";
 
         SetBkMode(hdc, TRANSPARENT);
         SetTextColor(hdc, RGB(255, 255, 255));
