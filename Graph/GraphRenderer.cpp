@@ -242,7 +242,7 @@ void GraphRenderer::drawGraph(HDC hdc, RECT clientRect) {
     hOldPen = (HPEN)SelectObject(hdc, hPenV);
     HGDIOBJ hOldBrush = SelectObject(hdc, hBrushV);
     for (const auto& v : graph_->GetVertices()) {
-       // KHÔNG VẼ ĐIỂM CÓ ID = 0 HOẶC ID TỪ 10000 TRỞ LÊN
+       
         if (v.id == 0 || v.id >= 10000) continue; 
         
         POINT p = worldToScreenInternal(v.x, v.y, w, h);
@@ -273,8 +273,7 @@ void GraphRenderer::drawUnits(HDC hdc, RECT clientRect) {
         
         POINT pts[3] = { {p.x, p.y - 8}, {p.x - 8, p.y + 8}, {p.x + 8, p.y + 8} };
         Polygon(hdc, pts, 3);
-        
-        // 1. CẬP NHẬT TÊN HIỂN THỊ CĂN CỨ TỪ SỐ SANG "SQ_..."
+       
         std::string label = u.getUnitId();
             
         SetBkMode(hdc, TRANSPARENT);
@@ -300,7 +299,7 @@ void GraphRenderer::drawUnits(HDC hdc, RECT clientRect) {
             DeleteObject(borderPen);
             DeleteObject(dropBrush);
             
-            SetTextColor(hdc, RGB(240, 240, 200)); 
+            SetTextColor(hdc, RGB(240, 240, 200));
             
             // 2. CẬP NHẬT DANH SÁCH UAV BẰNG MÃ CODE (A1, B1...)
             const auto& myUAVs = u.getUAVs();
@@ -340,13 +339,14 @@ void GraphRenderer::drawTargets(HDC hdc, RECT clientRect) {
     for (const auto& t : graph_->GetTargets()) {
         POINT p = worldToScreenInternal(t.x, t.y, w, h);
         Ellipse(hdc, p.x - 6, p.y - 6, p.x + 6, p.y + 6);
+        SetTextColor(hdc, RGB(0, 0, 0));
         // Code mới để hiển thị Tên mục tiêu (Cột name trong file CSV)
         std::string label = t.name;
         TextOutA(hdc, p.x + 8, p.y - 8, label.c_str(), (int)label.size());
     }
     // Hiển thị dropdown UAV tấn công mục tiêu khi mục tiêu được chọn
-    if (selectedTargetIndex_ >= 0) {
-        auto uavList = getUAVsForTarget(selectedTargetIndex_);
+    if (m_engine != nullptr && selectedTargetIndex_ >= 0) {
+        auto uavList = m_engine->GetUAVsAttackingTarget(selectedTargetIndex_);
         if (!uavList.empty()) {
             int lineH = 20;
             int boxWidth = 130;
@@ -437,50 +437,50 @@ bool GraphRenderer::handleTargetClick(int mouseX, int mouseY, RECT clientRect)
     selectedTargetIndex_ = -1;
     return false;
 }
-std::vector<std::string> GraphRenderer::getUAVsForTarget(int targetIdx) const
-{
-    std::vector<std::string> result;
-    if (!hasAssignment_ || !unitList_ || !graph_) return result;
-    int n = assignment_.nUavTypes;
-    int m = assignment_.nTargets;
-    if (targetIdx < 0 || targetIdx >= m) return result;
-
-    const auto& units = unitList_->getUnits();
-
-    for (int i = 0; i < n; ++i) {
-        if (assignment_.at(i, targetIdx) > 0) {
-            std::string uavName = "UAV_" + std::to_string(i + 1);
-
-            // Lấy đúng đơn vị chứa UAV loại i
-            if (assignment_.unitIndex.size() > i) {
-                int unitIdx = assignment_.unitIndex[i];
-                if (unitIdx >= 0 && unitIdx < (int)units.size()) {
-                    const auto& uavs = units[unitIdx].getUAVs();
-                    // Tìm UAV có code trùng với loại i (nếu có)
-                    // Nếu mỗi UAV có id duy nhất, bạn có thể duyệt qua uavs để tìm đúng code
-                    // Ở đây, nếu mỗi unit chỉ có 1 UAV, lấy luôn
-                    if (!uavs.empty()) {
-                        // Nếu số lượng UAV của đơn vị == nUavTypes, lấy theo i
-                        if ((int)uavs.size() == n) {
-                            uavName = uavs[i].getCode();
-                        }
-                        else {
-                            // Nếu không, lấy UAV đầu tiên của đơn vị
-                            uavName = uavs[0].getCode();
-                        }
-                    }
-                    else {
-                        uavName = "UAV_" + std::to_string(i + 1);
-                    }
-                    // Gắn thêm tên đơn vị nếu muốn
-                    uavName = units[unitIdx].getUnitId() + " - " + uavName;
-                }
-            }
-            result.push_back(uavName);
-        }
-    }
-    return result;
-}
+//std::vector<std::string> GraphRenderer::getUAVsForTarget(int targetIdx) const
+//{
+//    std::vector<std::string> result;
+//    if (!hasAssignment_ || !unitList_ || !graph_) return result;
+//    int n = assignment_.nUavTypes;
+//    int m = assignment_.nTargets;
+//    if (targetIdx < 0 || targetIdx >= m) return result;
+//
+//    const auto& units = unitList_->getUnits();
+//
+//    for (int i = 0; i < n; ++i) {
+//        if (assignment_.at(i, targetIdx) > 0) {
+//            std::string uavName = "UAV_" + std::to_string(i + 1);
+//
+//            // Lấy đúng đơn vị chứa UAV loại i
+//            if (assignment_.unitIndex.size() > i) {
+//                int unitIdx = assignment_.unitIndex[i];
+//                if (unitIdx >= 0 && unitIdx < (int)units.size()) {
+//                    const auto& uavs = units[unitIdx].getUAVs();
+//                    // Tìm UAV có code trùng với loại i (nếu có)
+//                    // Nếu mỗi UAV có id duy nhất, bạn có thể duyệt qua uavs để tìm đúng code
+//                    // Ở đây, nếu mỗi unit chỉ có 1 UAV, lấy luôn
+//                    if (!uavs.empty()) {
+//                        // Nếu số lượng UAV của đơn vị == nUavTypes, lấy theo i
+//                        if ((int)uavs.size() == n) {
+//                            uavName = uavs[i].getCode();
+//                        }
+//                        else {
+//                            // Nếu không, lấy UAV đầu tiên của đơn vị
+//                            uavName = uavs[0].getCode();
+//                        }
+//                    }
+//                    else {
+//                        uavName = "UAV_" + std::to_string(i + 1);
+//                    }
+//                    // Gắn thêm tên đơn vị nếu muốn
+//                    uavName = units[unitIdx].getUnitId() + " - " + uavName;
+//                }
+//            }
+//            result.push_back(uavName);
+//        }
+//    }
+//    return result;
+//}
 
 
 

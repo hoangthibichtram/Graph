@@ -279,9 +279,13 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
         SetCapture(hWnd);
         int x = LOWORD(lParam);
         int y = HIWORD(lParam);
-
         RECT clientRect;
         GetClientRect(hWnd, &clientRect);
+
+        if (g_renderer.handleTargetClick(x, y, clientRect)) {
+            InvalidateRect(hWnd, NULL, TRUE);   // Vẽ lại để hiện dropdown
+            break;
+        }
 
         if (g_renderer.handleUnitClick(x, y, clientRect)) {
             InvalidateRect(hWnd, NULL, TRUE);

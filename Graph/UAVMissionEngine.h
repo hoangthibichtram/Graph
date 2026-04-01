@@ -81,6 +81,8 @@ namespace UAVCore {
         const OptimizationProblem& GetProblem() const { return m_problem; }
 
         void PrintAssignmentReport(std::ostream& os = std::cout) const;
+        std::vector<std::string> GetUAVsAttackingTarget(int targetIndex) const;
+
 
     private:
         // Hàm nội bộ gọi đến Logger đã đăng ký

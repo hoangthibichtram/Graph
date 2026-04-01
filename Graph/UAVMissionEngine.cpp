@@ -61,11 +61,11 @@ namespace UAVCore {
     {
         // Giả sử có sẵn các màu phân định cho các đội (Cấu trúc RGBA)
         std::vector<RGBA> defaultColors = {
-            {1.0f, 0.0f, 0.0f, 0.5f}, // Đỏ (hơi trong suốt)(SQ1)
-            {1.0f, 0.0f, 1.0f, 0.8f}, // Xanh lá(SQ2)
-            {0.0f, 0.0f, 1.0f, 0.5f}, // Xanh lam(SQ3)
-            {1.0f, 1.0f, 0.0f, 0.5f}, // Vàng (SQ4)
-            {0.5f, 0.0f, 0.5f, 0.5f}  //// Màu Tím cho Đội 5 (SQ5)
+            {1.0f, 0.0f, 0.0f, 0.5f}, // Đỏ (hơi trong suốt)
+            {1.0f, 0.0f, 1.0f, 0.8f}, // Xanh lá
+            {0.0f, 0.0f, 1.0f, 0.5f}, // Xanh lam
+            {1.0f, 1.0f, 0.0f, 0.5f}, // Vàng 
+            {0.5f, 0.0f, 0.5f, 0.5f}  //// Màu Tím
         };
 
         // Lấy số lượng Unit từ Graph, gán màu ngẫu nhiên hoặc theo thứ tự
@@ -225,5 +225,22 @@ namespace UAVCore {
             }
         }
     }
+
+    std::vector<std::string> UAVMissionEngine::GetUAVsAttackingTarget(int targetIndex) const
+    {
+        std::vector<std::string> result;
+        int n = m_bestSolution.nUavTypes;
+        int m = m_bestSolution.nTargets;
+        if (targetIndex < 0 || targetIndex >= m) return result;
+
+        for (int i = 0; i < n; ++i) {
+            if (m_bestSolution.x[i * m + targetIndex] == 1) {
+                // Lấy đúng code UAV từ bài toán tối ưu
+                result.push_back(m_problem.uavs[i].code);
+            }
+        }
+        return result;
+    }
+
 
 } // kết thúc namespace UAVCore
