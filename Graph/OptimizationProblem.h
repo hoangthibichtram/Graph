@@ -15,6 +15,7 @@ struct TargetOpt
     int vertexId;
     std::string type;
     double explosive_required; // Lượng nổ cần thiết để tiêu diệt mục tiêu
+    int Priority;
 
 };
 

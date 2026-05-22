@@ -4,6 +4,7 @@
 #include <cmath>
 #include <algorithm>
 #include <iostream>
+#include <numeric> 
 
 static std::mt19937& rng()
 {
@@ -194,9 +195,14 @@ void UAVGAOptimizer::repair(AssignmentSolution& sol)
         sol.x.assign(sol.nUavTypes * sol.nTargets, 0);
     }
 
-    int n = sol.nUavTypes;   // số lượng UAV
-    int m = sol.nTargets;    // số mục tiêu
+    int n = sol.nUavTypes;   
+    int m = sol.nTargets;   
     if (m <= 0) return;
+    std::vector<int> targetOrder(m);
+    std::iota(targetOrder.begin(), targetOrder.end(), 0);
+    std::sort(targetOrder.begin(), targetOrder.end(), [&](int a, int b) {
+        return prob_.targets[a].Priority > prob_.targets[b].Priority;
+        });
 
     for (int i = 0; i < n; ++i)
     {
@@ -205,16 +211,15 @@ void UAVGAOptimizer::repair(AssignmentSolution& sol)
         double maxBudget = u.maxBudget;
         double cost = u.costPerAttack;
 
-        // Tính hiệu suất eij = vj * pij / cost
         struct Item { int j; double e; };
         std::vector<Item> items;
 
         int totalCount = 0;
         double totalCost = 0.0;
 
-        for (int j = 0; j < m; ++j)
+        for (int idx = 0; idx < m; ++idx)
         {
-
+            int j = targetOrder[idx];
             if (sol.at(i, j) == 1)
             {
 
@@ -227,33 +232,45 @@ void UAVGAOptimizer::repair(AssignmentSolution& sol)
                 // Tránh lỗi chia cho 0 nếu cost = 0, nếu cost bằng 0 thì ta cho hiệu suất cao (ví dụ vj * pij)
                 double e = (cost > 0 ? (vj * pij) / cost : (vj * pij));
 
-                items.push_back({ j, e });//
+                items.push_back({ j, e });
             }
         }
 
         // Nếu vi phạm ràng buộc → loại bỏ mục tiêu có hiệu suất thấp nhất
-        while (totalCount > maxCount || totalCost > maxBudget)
+        int idx = m - 1;
+        while ((totalCount > maxCount || totalCost > maxBudget) && idx >= 0)
         {
-            if (items.empty()) break;
+            int j = targetOrder[idx];
+            auto it = std::find_if(items.begin(), items.end(), [j](const Item& item) { return item.j == j; });
+            if (it != items.end())
+            {
+                sol.at(i, j) = 0;
+                totalCount--;
+                totalCost -= cost;
+                items.erase(it);
+            }
+            --idx;
+            //if (items.empty()) break;
 
-            // sắp xếp tăng dần theo hiệu suất
-            std::sort(items.begin(), items.end(),
-                [](const Item& a, const Item& b) { return a.e < b.e; });
+            //// sắp xếp tăng dần theo hiệu suất
+            //std::sort(items.begin(), items.end(),
+            //    [](const Item& a, const Item& b) { return a.e < b.e; });
 
-            int jRemove = items.front().j;
-            sol.at(i, jRemove) = 0; // Trực tiếp đặt thành 0 để chặn đánh mục tiêu này
+            //int jRemove = items.front().j;
+            //sol.at(i, jRemove) = 0; // Trực tiếp đặt thành 0 để chặn đánh mục tiêu này
 
-            totalCount--;
-            totalCost -= cost;
+            //totalCount--;
+            //totalCost -= cost;
 
-            items.erase(items.begin());
+            //items.erase(items.begin());
         }
     }
 
     // 2. Ràng buộc lượng nổ cho từng mục tiêu
-    for (int j = 0; j < m; ++j)
+    for (int idx = 0; idx < m; ++idx)
     {
-        double requiredExplosive = prob_.targets[j].explosive_required; // field này phải có trong target
+        int j = targetOrder[idx];
+        double requiredExplosive = prob_.targets[j].explosive_required;
         double totalExplosive = 0.0;
         struct UavAssign { int i; double eff; double explosive; double cost; };
         std::vector<UavAssign> assigned;
@@ -265,7 +282,7 @@ void UAVGAOptimizer::repair(AssignmentSolution& sol)
                 double vj = prob_.targets[j].value;
                 double pij = prob_.uavs[i].pij[j];
                 double cost = prob_.uavs[i].costPerAttack;
-                double explosive = prob_.uavs[i].explosive; // field này phải có trong UAV
+                double explosive = prob_.uavs[i].explosive;
                 double eff = (cost > 0 ? (vj * pij) / cost : (vj * pij));
                 assigned.push_back({ i, eff, explosive, cost });
                 totalExplosive += explosive;

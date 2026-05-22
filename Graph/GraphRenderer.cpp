@@ -438,50 +438,7 @@ bool GraphRenderer::handleTargetClick(int mouseX, int mouseY, RECT clientRect)
     selectedTargetIndex_ = -1;
     return false;
 }
-//std::vector<std::string> GraphRenderer::getUAVsForTarget(int targetIdx) const
-//{
-//    std::vector<std::string> result;
-//    if (!hasAssignment_ || !unitList_ || !graph_) return result;
-//    int n = assignment_.nUavTypes;
-//    int m = assignment_.nTargets;
-//    if (targetIdx < 0 || targetIdx >= m) return result;
-//
-//    const auto& units = unitList_->getUnits();
-//
-//    for (int i = 0; i < n; ++i) {
-//        if (assignment_.at(i, targetIdx) > 0) {
-//            std::string uavName = "UAV_" + std::to_string(i + 1);
-//
-//            // Lấy đúng đơn vị chứa UAV loại i
-//            if (assignment_.unitIndex.size() > i) {
-//                int unitIdx = assignment_.unitIndex[i];
-//                if (unitIdx >= 0 && unitIdx < (int)units.size()) {
-//                    const auto& uavs = units[unitIdx].getUAVs();
-//                    // Tìm UAV có code trùng với loại i (nếu có)
-//                    // Nếu mỗi UAV có id duy nhất, bạn có thể duyệt qua uavs để tìm đúng code
-//                    // Ở đây, nếu mỗi unit chỉ có 1 UAV, lấy luôn
-//                    if (!uavs.empty()) {
-//                        // Nếu số lượng UAV của đơn vị == nUavTypes, lấy theo i
-//                        if ((int)uavs.size() == n) {
-//                            uavName = uavs[i].getCode();
-//                        }
-//                        else {
-//                            // Nếu không, lấy UAV đầu tiên của đơn vị
-//                            uavName = uavs[0].getCode();
-//                        }
-//                    }
-//                    else {
-//                        uavName = "UAV_" + std::to_string(i + 1);
-//                    }
-//                    // Gắn thêm tên đơn vị nếu muốn
-//                    uavName = units[unitIdx].getUnitId() + " - " + uavName;
-//                }
-//            }
-//            result.push_back(uavName);
-//        }
-//    }
-//    return result;
-//}
+
 
 
 

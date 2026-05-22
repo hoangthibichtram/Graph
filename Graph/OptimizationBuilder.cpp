@@ -132,7 +132,6 @@ OptimizationProblem OptimizationBuilder::build(const UnitUAVList& unitList,
                 uav.pij[j] = pijMap[key];
             }
             else {
-                // NẾU GẶP MỤC TIÊU LẠ KHÔNG CÓ TRONG FILE PROBABILITY, GÁN TỶ LỆ TRÚNG 50%
                 uav.pij[j] = 0.0;
             }
         }
