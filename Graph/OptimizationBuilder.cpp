@@ -96,6 +96,7 @@ OptimizationProblem OptimizationBuilder::build(const UnitUAVList& unitList,
     {
         for (const auto& u : unit.getUAVs())
         {
+            if (u.getExplosive() <= 0) continue;// UAV trinh sát k cho tham chiến nữa
             UAVTypeOpt opt;
             opt.id = u.getId();
             opt.code = u.getCode();
@@ -125,7 +126,7 @@ OptimizationProblem OptimizationBuilder::build(const UnitUAVList& unitList,
     // 3. Gán Pij vào UAVTypeOpt
     for (auto& uav : prob.uavs)
     {
-        for (int j = 0; j < prob.targets.size(); j++)
+        for (int j = 0; j < prob.targets.size(); j++) 
         {
             std::string key = uav.code + "|" + std::to_string(prob.targets[j].id);
             if (pijMap.count(key)) {
@@ -138,10 +139,10 @@ OptimizationProblem OptimizationBuilder::build(const UnitUAVList& unitList,
     }
 
 
-    int populationSize = 5;
-    int maxGenerations = 3;
-    double crossoverRate = 0.8;
-    double mutationRate = 0.05;
+    int populationSize = 200;
+    int maxGenerations = 500;
+    double crossoverRate = 0.85;
+    double mutationRate = 0.1;
 
     UAVGAOptimizer ga(prob, populationSize, maxGenerations, crossoverRate, mutationRate);
     AssignmentSolution best = ga.run();

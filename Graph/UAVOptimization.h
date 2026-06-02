@@ -28,7 +28,7 @@ public:
     AssignmentSolution run();
 
 private:
-    const OptimizationProblem& prob_;   // ✔ dùng được vì forward declare đủ
+    const OptimizationProblem& prob_;  
     int popSize_;
     int maxGen_;
     double pc_;

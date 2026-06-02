@@ -46,7 +46,8 @@ void UAVGAOptimizer::initPopulation()
     population_.clear();
     population_.resize(popSize_);
 
-    std::uniform_int_distribution<int> bit(0, 1);
+    std::uniform_int_distribution<int> targetDist(0, m - 1);
+    std::uniform_real_distribution<double> probDist(0.0, 1.0);
 
     for (int k = 0; k < popSize_; ++k)
     {
@@ -58,22 +59,20 @@ void UAVGAOptimizer::initPopulation()
         // Khởi tạo: phân bổ ngẫu nhiên ngẫu nhiên xij = 0 hoặc 1
         for (int i = 0; i < n; ++i)
         {
-            for (int j = 0; j < m; ++j)
+            // 95% UAV được giao nhiệm vụ (có thể điều chỉnh)
+            if (probDist(rng()) < 0.95)
             {
-                if (prob_.uavs[i].aij[j] == 0)
-                    sol.at(i, j) = 0;
-                else
-                    sol.at(i, j) = bit(rng());   // Chỉ sử dụng 0 hoặc 1 như nguyên thủy
+                int j = targetDist(rng());  // chọn ngẫu nhiên một mục tiêu
+                if (j < (int)prob_.uavs[i].aij.size() && prob_.uavs[i].aij[j] != 0)
+                    sol.at(i, j) = 1;
             }
         }
 
-        repair(sol);
         evaluate(sol);
         population_[k] = sol;
     }
 }
-
-// Hàm thích nghi F = ∑ v_j (1 - ∏ (1 - p_ij)^{x_ij}) - CÓ KHẤU TRỪ PHÒNG KHÔNG CHI VIỆN
+// Hàm thích nghi F = ∑ v_j (1 - ∏ (1 - p_ij)^{x_ij}).
 void UAVGAOptimizer::evaluate(AssignmentSolution& sol)
 {
     if (sol.x.size() != sol.nUavTypes * sol.nTargets)
@@ -82,37 +81,45 @@ void UAVGAOptimizer::evaluate(AssignmentSolution& sol)
     int n = sol.nUavTypes;
     int m = sol.nTargets;
 
-    std::vector<double> F_killProb(m, 0.0);
-    std::vector<int> activeDefenses;
-
-    // 1. Tính toán hiệu quả rải bom thô & Nhận diện Trạm Phòng Không còn sống
+    // 1. Tính xác suất tiêu diệt từng mục tiêu
+    std::vector<double> killProb(m, 0.0);
     for (int j = 0; j < m; ++j)
     {
-        double Sj = 1.0;
+        double miss = 1.0;
         for (int i = 0; i < n; ++i)
         {
-            int xij = sol.at(i, j);
-            if (xij <= 0) continue;
-
-            double missOne = 1.0 - prob_.uavs[i].pij[j];
-            double missAll = std::pow(missOne, xij);
-            Sj *= missAll;
+            if (sol.at(i, j) == 1 && j < (int)prob_.uavs[i].pij.size())  
+                miss *= (1.0 - prob_.uavs[i].pij[j]);
         }
-
-        double killProb = 1.0 - Sj;
-        F_killProb[j] = killProb;
+        killProb[j] = 1.0 - miss;
     }
 
-    // 2. Chấm điểm Thích nghi nguyên thủy (Chỉ tính sát thương)
-    double F = 0.0;
+    // 2. Tổng giá trị kỳ vọng
+    double expectedValue = 0.0;
+    for (int j = 0; j < m; ++j)
+        expectedValue += prob_.targets[j].value * killProb[j];
+
+    // 3. Penalty cho ràng buộc explosive (thiếu hụt)
+    double penalty = 0.0;
+    const double PENALTY_FACTOR = 10000.0;
     for (int j = 0; j < m; ++j)
     {
-        double hitRate = F_killProb[j];
-        double vj = prob_.targets[j].value;
-        F += vj * hitRate; // Điểm thu về  từ sát thương triệt để
+        double required = prob_.targets[j].explosive_required;
+        if (required <= 0) continue;
+
+        double totalExplosive = 0.0;
+        for (int i = 0; i < n; ++i)
+        {
+            if (sol.at(i, j) == 1)           
+                totalExplosive += prob_.uavs[i].explosive;
+        }
+
+        double shortage = std::max(0.0, required - totalExplosive);
+        double surplus = std::max(0.0, totalExplosive - required);
+        penalty += shortage * 10000.0 + surplus * 10.0;
     }
 
-    sol.fitness = F;
+    sol.fitness = expectedValue - penalty;
 }
 
 // Chọn lọc roulette
@@ -187,23 +194,16 @@ void UAVGAOptimizer::mutate(AssignmentSolution& child)
         }
     }
 }
-
 void UAVGAOptimizer::repair(AssignmentSolution& sol)
 {
     if (sol.x.size() != sol.nUavTypes * sol.nTargets)
-    {
         sol.x.assign(sol.nUavTypes * sol.nTargets, 0);
-    }
 
-    int n = sol.nUavTypes;   
-    int m = sol.nTargets;   
+    int n = sol.nUavTypes;
+    int m = sol.nTargets;
     if (m <= 0) return;
-    std::vector<int> targetOrder(m);
-    std::iota(targetOrder.begin(), targetOrder.end(), 0);
-    std::sort(targetOrder.begin(), targetOrder.end(), [&](int a, int b) {
-        return prob_.targets[a].Priority > prob_.targets[b].Priority;
-        });
 
+    // ========== 1. Ràng buộc số lượng & ngân sách cho từng UAV ==========
     for (int i = 0; i < n; ++i)
     {
         const auto& u = prob_.uavs[i];
@@ -211,69 +211,86 @@ void UAVGAOptimizer::repair(AssignmentSolution& sol)
         double maxBudget = u.maxBudget;
         double cost = u.costPerAttack;
 
-        struct Item { int j; double e; };
+        // Thu thập các mục tiêu mà UAV i đang tấn công
+        struct Item
+        {
+            int j;
+            double efficiency;   // value * p_ij / cost
+            double priorityWeight;
+        };
         std::vector<Item> items;
-
         int totalCount = 0;
         double totalCost = 0.0;
 
-        for (int idx = 0; idx < m; ++idx)
+        for (int j = 0; j < m; ++j)
         {
-            int j = targetOrder[idx];
             if (sol.at(i, j) == 1)
             {
-
                 totalCount++;
                 totalCost += cost;
 
                 double vj = prob_.targets[j].value;
                 double pij = prob_.uavs[i].pij[j];
+                double eff = (cost > 0) ? (vj * pij) / cost : (vj * pij);
+                double priorityWeight = (prob_.targets[j].Priority > 0)
+                    ? 1.0 / prob_.targets[j].Priority
+                    : 1.0;// Priority càng nhỏ càng quan trọng
 
-                // Tránh lỗi chia cho 0 nếu cost = 0, nếu cost bằng 0 thì ta cho hiệu suất cao (ví dụ vj * pij)
-                double e = (cost > 0 ? (vj * pij) / cost : (vj * pij));
-
-                items.push_back({ j, e });
+                items.push_back({ j, eff, priorityWeight });
             }
         }
 
-        // Nếu vi phạm ràng buộc → loại bỏ mục tiêu có hiệu suất thấp nhất
-        int idx = m - 1;
-        while ((totalCount > maxCount || totalCost > maxBudget) && idx >= 0)
+        // Nếu vi phạm, cần loại bỏ các mục tiêu kém hiệu quả nhất
+        if (totalCount > maxCount || totalCost > maxBudget)
         {
-            int j = targetOrder[idx];
-            auto it = std::find_if(items.begin(), items.end(), [j](const Item& item) { return item.j == j; });
-            if (it != items.end())
+            // Tính combined score = efficiency * priorityWeight
+            std::vector<std::pair<int, double>> scored;
+            for (const auto& it : items)
             {
-                sol.at(i, j) = 0;
+                double combined = it.efficiency * it.priorityWeight;
+                scored.push_back({ it.j, combined });
+            }
+
+            // Sắp xếp tăng dần (thấp nhất lên đầu)
+            std::sort(scored.begin(), scored.end(),
+                [](const std::pair<int, double>& a, const std::pair<int, double>& b) {
+                    return a.second < b.second;
+                });
+
+            // Loại bỏ từ đầu danh sách cho đến khi thỏa mãn
+            while ((totalCount > maxCount || totalCost > maxBudget) && !scored.empty())
+            {
+                int jRemove = scored.front().first;
+                sol.at(i, jRemove) = 0;
                 totalCount--;
                 totalCost -= cost;
-                items.erase(it);
+                scored.erase(scored.begin());
+
+                // Cũng xóa khỏi items nếu cần (không bắt buộc)
+                auto it = std::find_if(items.begin(), items.end(),
+                    [jRemove](const Item& itm) { return itm.j == jRemove; });
+                if (it != items.end()) items.erase(it);
             }
-            --idx;
-            //if (items.empty()) break;
-
-            //// sắp xếp tăng dần theo hiệu suất
-            //std::sort(items.begin(), items.end(),
-            //    [](const Item& a, const Item& b) { return a.e < b.e; });
-
-            //int jRemove = items.front().j;
-            //sol.at(i, jRemove) = 0; // Trực tiếp đặt thành 0 để chặn đánh mục tiêu này
-
-            //totalCount--;
-            //totalCost -= cost;
-
-            //items.erase(items.begin());
         }
     }
 
-    // 2. Ràng buộc lượng nổ cho từng mục tiêu
-    for (int idx = 0; idx < m; ++idx)
+    // ============================================================
+    // PHẦN 2: Ràng buộc lượng nổ (explosive) cho từng mục tiêu 
+    // ============================================================
+    for (int j = 0; j < m; ++j)
     {
-        int j = targetOrder[idx];
-        double requiredExplosive = prob_.targets[j].explosive_required;
+        double required = prob_.targets[j].explosive_required;
+        if (required <= 0) continue;
+
         double totalExplosive = 0.0;
-        struct UavAssign { int i; double eff; double explosive; double cost; };
-        std::vector<UavAssign> assigned;
+        struct UavInfo
+        {
+            int i;
+            double eff;
+            double explosive;
+            double priorityWeight;
+        };
+        std::vector<UavInfo> assigned;
 
         for (int i = 0; i < n; ++i)
         {
@@ -282,25 +299,53 @@ void UAVGAOptimizer::repair(AssignmentSolution& sol)
                 double vj = prob_.targets[j].value;
                 double pij = prob_.uavs[i].pij[j];
                 double cost = prob_.uavs[i].costPerAttack;
-                double explosive = prob_.uavs[i].explosive;
-                double eff = (cost > 0 ? (vj * pij) / cost : (vj * pij));
-                assigned.push_back({ i, eff, explosive, cost });
-                totalExplosive += explosive;
+                double eff = (cost > 0) ? (vj * pij) / cost : (vj * pij);
+                double priorityWeight = 1.0 / prob_.targets[j].Priority;
+                assigned.push_back({ i, eff, prob_.uavs[i].explosive, priorityWeight });
+                totalExplosive += prob_.uavs[i].explosive;
             }
         }
 
-        // Nếu tổng lượng nổ vượt yêu cầu, loại bỏ UAV hiệu suất thấp cho đến khi vừa đủ
-        while (!assigned.empty() && totalExplosive - assigned.front().explosive >= requiredExplosive)
+        // Nếu tổng explosive vượt quá yêu cầu, cần loại bỏ bớt UAV kém hiệu quả
+        if (totalExplosive > required)
         {
-            std::sort(assigned.begin(), assigned.end(),
-                [](const UavAssign& a, const UavAssign& b) { return a.explosive < b.explosive; });
-            int iRemove = assigned.front().i;
-            totalExplosive -= assigned.front().explosive;
-            sol.at(iRemove, j) = 0;
-            assigned.erase(assigned.begin());
+            // Tính combined score cho từng UAV (eff * priorityWeight)
+            std::vector<std::pair<int, double>> scored;
+            for (const auto& u : assigned)
+            {
+                double combined = u.eff * u.priorityWeight;
+                scored.push_back({ u.i, combined });
+            }
+
+            // Sắp xếp tăng dần (hiệu quả thấp nhất lên đầu)
+            std::sort(scored.begin(), scored.end(),
+                [](const std::pair<int, double>& a, const std::pair<int, double>& b) {
+                    return a.second < b.second;
+                });
+
+            // Loại bỏ UAV có combined score thấp nhất
+            for (const auto& candidate : scored)
+            {
+                int iRemove = candidate.first;
+                double explosiveRemove = 0.0;
+                for (const auto& u : assigned)
+                    if (u.i == iRemove) { explosiveRemove = u.explosive; break; }
+                if (totalExplosive - explosiveRemove >= required)
+                {
+                    sol.at(iRemove, j) = 0;
+                    totalExplosive -= explosiveRemove;
+                    // Cập nhật lại danh sách assigned nếu cần (không bắt buộc)
+                }
+                else
+                {
+                    // Nếu không thể loại bỏ thêm nữa thì dừng
+                    break;
+                }
+            }
         }
     }
 }
+
 
 // Chạy GA
 AssignmentSolution UAVGAOptimizer::run()
