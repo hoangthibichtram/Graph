@@ -70,6 +70,7 @@ struct Target
     double value_usd;
     int id_vertex;
     std::string typeVertex;
+	int Priority=1;
 };
 
 class Graph
@@ -87,13 +88,12 @@ public:
     bool ReadTargetFile(const std::string& path);     // Data_target columns specified
 
     // Hàm đọc tất cả dữ liệu
-    bool readAllData(const std::string& unitFile,
+    bool readAllData(
+        const std::string& unitFile,
         const std::string& vertexFile,
         const std::string& edgeFile,
         const std::string& targetFile,
-        const std::string& unitsFolder,
-        const std::string& uavPrefix = "data_uav_",
-        const std::string& uavExt = ".csv");
+        const std::string& uavFile);
 
     int findNearestVertex(double x, double y) const;
     double shortestPathDistance(int startId, int endId) const;

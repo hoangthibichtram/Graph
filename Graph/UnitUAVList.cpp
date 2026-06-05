@@ -234,16 +234,100 @@ bool UnitUAVList::loadUAVsFromPerUnitFiles(const std::string& folder,
 }
 
 
-// (không bắt buộc) giữ nguyên để khả năng đọc file tổng hợp nếu cần trong tương lai
 bool UnitUAVList::loadUAVsFromCombinedFile(const std::string& path)
 {
-    // Giữ interface nhưng trả false nhanh để phản ánh yêu cầu hiện tại:
-    // Người dùng muốn dùng file riêng cho từng đơn vị, không cần phân phối từ file tổng hợp.
-    // Nếu bạn vẫn muốn hỗ trợ file tổng hợp, hãy yêu cầu để bật lại.
-    (void)path;
-    return false;
-}
+    std::ifstream ifs(path);
+    if (!ifs.is_open()) {
+        std::cout << "[UAV] LOI: Khong mo duoc file: " << path << "\n";
+        return false;
+    }
 
+    std::string header;
+    if (!std::getline(ifs, header)) return false;
+    RemoveUTF8BOM(header);
+    header = Trim(header);
+    char delim = DetectDelimiter(header);
+    auto hdr = ParseCsvLine(header, delim);
+
+    // Map tên cột → index (không phân biệt hoa thường)
+    std::unordered_map<std::string, size_t> hidx;
+    for (size_t i = 0; i < hdr.size(); ++i)
+        hidx[ToLower(hdr[i])] = i;
+
+    auto col = [&](std::initializer_list<const char*> names) -> int {
+        for (auto n : names) {
+            auto it = hidx.find(ToLower(n));
+            if (it != hidx.end()) return (int)it->second;
+        }
+        return -1;
+        };
+
+    // Tìm index từng cột — chấp nhận cả "explosize" lẫn "explosive"
+    int iId = col({ "uav_id","id" });
+    int iCode = col({ "uav_code","code" });
+    int iType = col({ "uav_type","type" });
+    int iRange = col({ "range" });
+    int iSpeed = col({ "speed" });
+    int iWeapon = col({ "weapon" });
+    int iExp = col({ "explosive","explosize","expl" });
+    int iRadius = col({ "radius" });
+    int iCost = col({ "cost_usd","cost","price" });
+    int iUnit = col({ "unit_id","unit","unitid" });
+
+    std::string line;
+    int added = 0;
+    while (std::getline(ifs, line))
+    {
+        RemoveUTF8BOM(line);
+        line = Trim(line);
+        if (line.empty() || line[0] == '#' || line[0] == '/') continue;
+
+        auto tok = ParseCsvLine(line, delim);
+        try
+        {
+            // Lấy unit_id để tìm đúng tiểu đội
+            std::string unitId;
+            if (iUnit >= 0 && iUnit < (int)tok.size())
+                unitId = tok[iUnit];
+            if (unitId.empty()) continue;
+
+            // Tìm UnitUAV tương ứng
+            UnitUAV* unit = getUnitById(unitId);
+            if (!unit) {
+                std::cout << "[UAV] CANH BAO: Khong tim thay don vi '"
+                    << unitId << "'\n";
+                continue;
+            }
+
+            // Đọc từng trường
+            UAV u;
+            if (iId >= 0) u.setId(std::stoi(tok[iId]));
+            if (iCode >= 0) u.setCode(tok[iCode]);
+            if (iType >= 0) u.setType(tok[iType]);
+            if (iRange >= 0) u.setRange(std::stof(tok[iRange]));
+            if (iSpeed >= 0) u.setSpeed(std::stof(tok[iSpeed]));
+            if (iWeapon >= 0) u.setWeapon(tok[iWeapon]);
+            if (iExp >= 0) u.setExplosize(std::stof(tok[iExp]));
+            if (iRadius >= 0) u.setRadius(std::stof(tok[iRadius]));
+            if (iCost >= 0) u.setCostUsd(std::stod(tok[iCost]));
+            u.setUnitId(unitId);
+
+            unit->addUAV(u);
+            added++;
+
+            std::cout << "[UAV] " << u.getCode()
+                << " -> don vi " << unitId
+                << " | explosive=" << u.getExplosive()
+                << " | cost=" << u.getCostUsd() << "\n";
+        }
+        catch (...) {
+            std::cout << "[UAV] LOI parse dong: " << line << "\n";
+        }
+    }
+
+    std::cout << "[UAV] Da tai " << added << " UAV tu " << path << "\n";
+    return added > 0;
+}
 int UnitUAVList::getTotalUAVCount() const
 {
     int total = 0;

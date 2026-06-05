@@ -259,12 +259,11 @@ bool Graph::ReadEdgesFile(const std::string& path)
 
                 float w = static_cast<float>(ComputeDistance(sV, eV));
                 AddEdge(sV, eV, w);
+                AddEdge(eV, sV, w);// cạnh 2 chiều.
             }
         }
         catch (...) { continue; }
     }
-
-    // --- ĐOẠN CODE THÊM MỚI: TỰ ĐỘNG GIĂNG DÂY CHO NGHĨA ĐỊA (ỐC ĐẢO) ---
     // Duyệt tìm những đỉnh nào (như đỉnh 31) đang KHÔNG có bất kỳ Edge nào nối tới nó
     for (const auto& v : vertices_) {
         bool hasConnection = false;
@@ -361,12 +360,15 @@ bool Graph::ReadTargetFile(const std::string& path)
                 // Ô CHỐT THÍ: ID_VERTEX LÀ CỘT THỨ 8 (Tính từ 0)
                 t.id_vertex = (tok[8].empty()) ? 0 : std::stoi(tok[8]);
 
-                // Nếu có ghi cột 9 thì lấy, ko thì mặc định là "target"
+                // Cột 9: typeVertex (giữ nguyên)
                 if (tok.size() >= 10 && !tok[9].empty()) t.typeVertex = Trim(tok[9]);
-                else t.typeVertex = "target"; // Mặc định vớt vát!
+                else t.typeVertex = "target";
 
-                // --- ĐOẠN THÊM MỚI: TỰ ĐỘNG KHÓA TỌA ĐỘ MỤC TIÊU VÀO ĐỈNH ---
-                // Để chắc chắn cục màu đỏ vẽ đè chuẩn 100% lên cục màu xanh của bạn
+                if (tok.size() >= 11 && !tok[10].empty())
+                    t.Priority = std::stoi(tok[10]);
+                else
+                    t.Priority = 1; // fallback an toàn nếu thiếu cột
+
                 Vertex* vNode = findVertexById(t.id_vertex);
                 if (vNode != nullptr) {
                     t.x = vNode->x;
@@ -404,22 +406,21 @@ bool Graph::readAllData(const std::string& unitFile,
     const std::string& vertexFile,
     const std::string& edgeFile,
     const std::string& targetFile,
-    const std::string& unitsFolder,
-    const std::string& uavPrefix,
-    const std::string& uavExt)
+    const std::string& uavFile)
 {
     bool success = true;
 
     if (!ReadVerticesFile(vertexFile)) success = false;
-    if (!ReadEdgesFile(edgeFile)) success = false;
+    if (!ReadEdgesFile(edgeFile))      success = false;
     if (!unitList.loadUnitsFromFile(unitFile)) success = false;
-    unitList.loadUAVsFromPerUnitFiles(unitsFolder, uavPrefix, uavExt);
 
-    // Đọc Target File (Giờ ta sẽ ép nó phải đọc được!)
-    if (!ReadTargetFile(targetFile)) success = false;
+    // Đọc tất cả UAV từ 1 file duy nhất (data_uav_full.csv)
+    if (!unitList.loadUAVsFromCombinedFile(uavFile)) success = false;
+
+    if (!ReadTargetFile(targetFile))   success = false;
 
     return success;
-} // Hết.
+}
 
 Vertex Graph::GetVertexById(int id) const {
     auto it = idIndexMap_.find(id);

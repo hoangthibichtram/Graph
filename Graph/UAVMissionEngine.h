@@ -14,9 +14,7 @@ namespace UAVCore {
         std::string vertexFile;
         std::string edgeFile;
         std::string targetFile;
-        std::string unitsFolder;
-        std::string uavPrefix = "data_uav_";
-        std::string uavExt = ".csv";
+        std::string uavFile;
     };
 
     // Chuẩn màu RGBA cho Unreal Engine (0.0f -> 1.0f)

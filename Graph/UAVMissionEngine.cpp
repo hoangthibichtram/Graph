@@ -19,8 +19,8 @@ namespace UAVCore {
     bool UAVMissionEngine::InitEngine(const EngineConfig& config)
     {
         PrintLog("[UAVMissionEngine] Bat dau doc du lieu MAP tu cac file CSV...");
-        bool success = m_graph.readAllData(config.unitFile, config.vertexFile, config.edgeFile, config.targetFile, config.unitsFolder, config.uavPrefix, config.uavExt);
-
+        bool success = m_graph.readAllData(config.unitFile, config.vertexFile,
+            config.edgeFile, config.targetFile, config.uavFile);
         if (success) {
             PrintLog("[UAVMissionEngine] TAI DU LIEU HOAN TAT THANH CONG.");
 
@@ -42,7 +42,7 @@ namespace UAVCore {
         config.vertexFile = dataDirectory + "\\Vertex.csv";
         config.edgeFile = dataDirectory + "\\Edge.csv";
         config.targetFile = dataDirectory + "\\Data_target.csv";
-        config.unitsFolder = dataDirectory + "\\units";
+        config.uavFile = dataDirectory + "\\data_uav_full.csv";
         return InitEngine(config);
     }
 
@@ -212,15 +212,13 @@ namespace UAVCore {
 
         for (int i = 0; i < n; ++i) {
             const UAVTypeOpt& uav = uavs[i];
-            bool isRecon = (uav.code.rfind("a_A", 0) == 0 && uav.explosive == 0);
             for (int j = 0; j < m; ++j) {
                 if (assignment.x[i * m + j] == 1) {
-                    if (isRecon) {
-                        os << "UAV " << uav.code << " (Don vi: " << uav.unitName << ") **trinh sát** mục tiêu: " << targets[j].name << std::endl;
-                    }
-                    else {
-                        os << "UAV " << uav.code << " (Don vi: " << uav.unitName << ") **tấn công** mục tiêu: " << targets[j].name << std::endl;
-                    }
+                    os << "UAV " << uav.code
+                        << " (Don vi: " << uav.unitName
+                        << ") TAN CONG muc tieu: " << targets[j].name << std::endl;
+                
+                
                 }
             }
         }
