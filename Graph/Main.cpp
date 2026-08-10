@@ -113,7 +113,6 @@ LRESULT CALLBACK ChartWndProc(HWND hChart, UINT message, WPARAM wParam, LPARAM l
 
         DeleteObject(redBrush);
         DeleteObject(greenBrush);
-
         EndPaint(hChart, &ps);
     }
     break;

@@ -1,7 +1,6 @@
 #pragma once
 #include "UnitUAVList.h"
 #include "resource.h"
-
 #include <vector>
 #include <string>
 #include <unordered_map>
@@ -82,10 +81,10 @@ public:
     bool ReadFromFile(const std::string& path);
 
     // Specific readers requested
-    bool ReadVerticesFile(const std::string& path);   // x,y,id,typeVertex
-    bool ReadEdgesFile(const std::string& path);      // WKT,id,start,end,weight
-    //bool ReadUavFile(const std::string& path);        // Data_uav columns specified
-    bool ReadTargetFile(const std::string& path);     // Data_target columns specified
+    bool ReadVerticesFile(const std::string& path);  
+    bool ReadEdgesFile(const std::string& path);      
+    //bool ReadUavFile(const std::string& path);        
+    bool ReadTargetFile(const std::string& path);     
 
     // Hàm đọc tất cả dữ liệu
     bool readAllData(
@@ -138,10 +137,7 @@ private:
         return (static_cast<uint64_t>(static_cast<uint32_t>(from)) << 32)
             | static_cast<uint32_t>(to);
     }
-
-    // BỔ SUNG: Quản lý đơn vị
     UnitUAVList unitList;
-
     std::vector<Vertex> vertices_;
     std::vector<Edge> edges_;
     std::vector<Vertex>& GetVerticesRef() { return vertices_; }

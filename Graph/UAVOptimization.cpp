@@ -402,8 +402,6 @@ void UAVGAOptimizer::repair(AssignmentSolution& sol)
             if (prob_.uavs[i].aij[j] == 0)
                 sol.at(i, j) = 0;
 }
-
-
 // Chạy GA
 AssignmentSolution UAVGAOptimizer::run()
 {

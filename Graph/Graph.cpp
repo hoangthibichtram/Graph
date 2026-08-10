@@ -45,12 +45,12 @@ namespace
         }
     }
 
-    static inline bool IsNumberStart(const std::string& s)
+   /* static inline bool IsNumberStart(const std::string& s)
     {
         if (s.empty()) return false;
         char c = s.front();
         return (c >= '0' && c <= '9') || c == '-' || c == '+';
-    }
+    }*/
 
     // Parse CSV line with simple quoted field handling
     static inline std::vector<std::string> ParseCsvLine(const std::string& line, char delim)
@@ -182,7 +182,6 @@ bool Graph::ReadVerticesFile(const std::string& path)
         RemoveUTF8BOM(line);
         line = Trim(line);
         if (line.empty()) continue;
-
         if (line[0] == '#' || line[0] == '/') continue;
         auto tok = ParseCsvLine(line, delim);
         try
@@ -251,7 +250,7 @@ bool Graph::ReadEdgesFile(const std::string& path)
                 if (idIndexMap_.find(startId) == idIndexMap_.end() ||
                     idIndexMap_.find(endId) == idIndexMap_.end())
                 {
-                    continue; // Skip if vertex not found
+                    continue;
                 }
 
                 const Vertex& sV = vertices_[idIndexMap_[startId]];
@@ -413,12 +412,8 @@ bool Graph::readAllData(const std::string& unitFile,
     if (!ReadVerticesFile(vertexFile)) success = false;
     if (!ReadEdgesFile(edgeFile))      success = false;
     if (!unitList.loadUnitsFromFile(unitFile)) success = false;
-
-    // Đọc tất cả UAV từ 1 file duy nhất (data_uav_full.csv)
     if (!unitList.loadUAVsFromCombinedFile(uavFile)) success = false;
-
     if (!ReadTargetFile(targetFile))   success = false;
-
     return success;
 }
 

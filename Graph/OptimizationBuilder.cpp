@@ -14,10 +14,6 @@
 #include <iostream>
 #include <limits>
 
-// ─────────────────────────────────────────────────────────────────────────────
-// loadPij() — Đọc Probability.csv → map "uav_code|target_id" → p_{ij}
-// Giữ nguyên, không thay đổi.
-// ─────────────────────────────────────────────────────────────────────────────
 static std::unordered_map<std::string, double> loadPij(const std::string& path)
 {
     std::unordered_map<std::string, double> mp;
@@ -53,17 +49,12 @@ static std::unordered_map<std::string, double> loadPij(const std::string& path)
     return mp;
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// build() — Hàm chính
-// ─────────────────────────────────────────────────────────────────────────────
 OptimizationProblem OptimizationBuilder::build(const UnitUAVList& unitList,
     const Graph& graph)
 {
     OptimizationProblem prob;
 
-    // ═══════════════════════════════════════════════════════════════
     // PHẦN 1: XÂY DỰNG DANH SÁCH MỤC TIÊU
-    // ═══════════════════════════════════════════════════════════════
     const auto& targets = graph.GetTargets();
     for (const auto& t : targets)
     {
@@ -89,12 +80,7 @@ OptimizationProblem OptimizationBuilder::build(const UnitUAVList& unitList,
     }
     int m = (int)prob.targets.size();
 
-    // ═══════════════════════════════════════════════════════════════
     // PHẦN 2: XÂY DỰNG DANH SÁCH UAV TẤN CÔNG
-    //
-    // ĐÃ XÓA: Không còn UAV trinh sát trong CSV lẫn trong code.
-    // Lọc explosive <= 0 để phòng ngừa nếu CSV cũ vẫn còn dòng thừa.
-    // ═══════════════════════════════════════════════════════════════
     const auto& units = unitList.getUnits();
     for (const auto& unit : units)
     {
@@ -154,10 +140,7 @@ OptimizationProblem OptimizationBuilder::build(const UnitUAVList& unitList,
     int n = (int)prob.uavs.size();
     std::cout << "[BUILD] Tong: " << n << " UAV tan cong, " << m << " muc tieu\n";
 
-    // ═══════════════════════════════════════════════════════════════
     // PHẦN 3: GÁN XÁC SUẤT p_{ij} TỪ Probability.csv
-    // ═══════════════════════════════════════════════════════════════
-    // !! ĐỔI ĐƯỜNG DẪN NÀY THÀNH PATH THỰC TẾ TRÊN MÁY BẠN !!
     auto pijMap = loadPij("D:\\VS_Prj\\Graph\\x64\\Debug\\Data\\Probability.csv");
 
     for (auto& uav : prob.uavs)
@@ -242,14 +225,10 @@ OptimizationProblem OptimizationBuilder::build(const UnitUAVList& unitList,
         }
     }
 
-    // ═══════════════════════════════════════════════════════════════
-    // PHẦN 6: TÍNH ĐƯỜNG BAY DIJKSTRA → best.paths[i][j]
-    //
-    // Với mỗi UAV tấn công i được gán mục tiêu j:
-    //   path = shortestPath(startV_đơn_vị → vertexId_mục_tiêu)
-    //
-    // ĐÃ XÓA: Không còn nhánh isRecon / bay tuần tra trinh sát.
-    // ═══════════════════════════════════════════════════════════════
+      // PHẦN 6: TÍNH ĐƯỜNG BAY DIJKSTRA → best.paths[i][j]
+       //
+       // Với mỗi UAV tấn công i được gán mục tiêu j:
+       //   path = shortestPath(startV_đơn_vị → vertexId_mục_tiêu)
     best.paths.resize(n, std::vector<std::vector<int>>(m));
 
     for (int i = 0; i < n; ++i)

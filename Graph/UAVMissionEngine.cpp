@@ -1,7 +1,7 @@
 #include "UAVMissionEngine.h"
 #include <iostream>
 #include <vector>
-#include <cmath> // THÊM THƯ VIỆN NÀY ĐỂ TÍNHKHOẢNG CÁCH
+#include <cmath> 
 
 namespace UAVCore {
 
@@ -23,11 +23,7 @@ namespace UAVCore {
             config.edgeFile, config.targetFile, config.uavFile);
         if (success) {
             PrintLog("[UAVMissionEngine] TAI DU LIEU HOAN TAT THANH CONG.");
-
-            // TỰ ĐỘNG GIĂNG DÂY TỪ CÁC CĂN CỨ VÀO MẠNG LƯỚI ĐIỂM
             ConnectUnitsToGraph();
-
-            // Cài đặt trạng thái và màu sắc cơ bản ngay sau khi load
             SetupDefaultDisplayStates();
         }
         else PrintLog("[UAVMissionEngine] LOI nap file CSV!");
@@ -241,4 +237,4 @@ namespace UAVCore {
     }
 
 
-} // kết thúc namespace UAVCore
+} 
