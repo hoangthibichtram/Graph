@@ -1,12 +1,17 @@
-#include "UAVOptimization.h"
-#include "OptimizationProblem.h"
+#include "Optimization.h"
 #include <random>
-#include <cmath>
 #include <algorithm>
+#include <cmath>
 #include <iostream>
 #include <numeric> 
 #include <chrono>
+#include <fstream>
+#include <sstream>
+#include <unordered_map>
+#include <limits>
 
+
+//hàm phụ trợ
 static std::mt19937& rng()
 {
     static std::mt19937 gen(
@@ -16,6 +21,43 @@ static std::mt19937& rng()
     return gen;
 }
 
+static std::unordered_map<std::string, double> loadPij(const std::string& path)
+{
+    std::unordered_map<std::string, double> mp;
+    std::ifstream ifs(path);
+    if (!ifs.is_open()) {
+        std::cout << "[Pij] CANH BAO: Khong mo duoc file: " << path << "\n";
+        return mp;
+    }
+    auto trim = [](std::string& s) {
+        s.erase(0, s.find_first_not_of(" \t\r\n"));
+        s.erase(s.find_last_not_of(" \t\r\n") + 1);
+        };
+    std::string line;
+    std::getline(ifs, line); // Bỏ qua header
+    while (std::getline(ifs, line))
+    {
+        if (line.empty()) continue;
+        std::stringstream ss(line);
+        std::string probIdStr, uavCodeStr, tgtIdStr, pStr;
+        std::getline(ss, probIdStr, ',');
+        std::getline(ss, uavCodeStr, ',');
+        std::getline(ss, tgtIdStr, ',');
+        std::getline(ss, pStr, ',');
+        trim(uavCodeStr); trim(tgtIdStr); trim(pStr);
+        if (uavCodeStr.empty() || tgtIdStr.empty() || pStr.empty()) continue;
+        try {
+            int tgtId = std::stoi(tgtIdStr);
+            double p = std::stod(pStr);
+            mp[uavCodeStr + "|" + std::to_string(tgtId)] = p;
+        }
+        catch (...) {}
+    }
+    std::cout << "[Pij] Da tai " << mp.size() << " gia tri xac suat.\n";
+    return mp;
+}
+
+// Khởi tạo tham số GA (kích thước quần thể, số thế hệ, tỉ lệ lai/đột biến)
 UAVGAOptimizer::UAVGAOptimizer(const OptimizationProblem& problem,
     int populationSize,
     int maxGenerations,
@@ -28,6 +70,8 @@ UAVGAOptimizer::UAVGAOptimizer(const OptimizationProblem& problem,
     , pm_(mutationRate)
 {
 }
+
+//GA
 
 // Khởi tạo quần thể: x[i,j] = số UAV loại i tấn công mục tiêu j
 void UAVGAOptimizer::initPopulation()
@@ -50,10 +94,8 @@ void UAVGAOptimizer::initPopulation()
     std::vector<int> targetByPriority(m);
     std::iota(targetByPriority.begin(), targetByPriority.end(), 0);
     std::sort(targetByPriority.begin(), targetByPriority.end(), [&](int a, int b) {
-    return prob_.targets[a].Priority < prob_.targets[b].Priority;
-    });
-    population_.clear();
-    population_.resize(popSize_);
+        return prob_.targets[a].priority < prob_.targets[b].priority;
+        });
 
     std::uniform_int_distribution<int> targetDist(0, m - 1);
     std::uniform_real_distribution<double> probDist(0.0, 1.0);
@@ -66,6 +108,14 @@ void UAVGAOptimizer::initPopulation()
         sol.x.assign(n * m, 0);
         if (probDist(rng()) < 0.25)
         {
+            // Xáo trộn thứ tự UAV để các cá thể "thông minh" đa dạng hơn
+            std::vector<int> uavOrder(n);
+            std::iota(uavOrder.begin(), uavOrder.end(), 0);
+            for (int s = n - 1; s > 0; --s) {
+                std::uniform_int_distribution<int> pick(0, s);
+                std::swap(uavOrder[s], uavOrder[pick(rng())]);
+            }
+
             // ── Khởi tạo "định hướng": gán UAV theo mục tiêu ưu tiên cao ──
             // Duyệt từng mục tiêu theo thứ tự ưu tiên,
             // cố gắng tìm UAV phù hợp (a_{ij}=1) chưa được gán
@@ -73,8 +123,9 @@ void UAVGAOptimizer::initPopulation()
             {
                 int j = targetByPriority[jIdx];
                 double accumulated = 0.0;
-                for (int i = 0; i < n; ++i)
+                for (int orderIdx = 0; orderIdx < n; ++orderIdx)
                 {
+                    int i = uavOrder[orderIdx];
                     // Chỉ gán nếu: khả dụng + chưa gán mục tiêu nào (maxCount=1)
                     if (prob_.uavs[i].aij[j] == 0) continue;
                     int alreadyUsed = 0;
@@ -110,58 +161,7 @@ void UAVGAOptimizer::initPopulation()
         population_[k] = sol;
     }
 }
-// Hàm thích nghi F = ∑ v_j (1 - ∏ (1 - p_ij)^{x_ij}).
-void UAVGAOptimizer::evaluate(AssignmentSolution& sol)
-{
-    if ((int)sol.x.size() != sol.nUavTypes * sol.nTargets) return;
-
-    int n = sol.nUavTypes;
-    int m = sol.nTargets;
-
-    // ── Bước 1: Tính S_j và kill probability cho từng mục tiêu ──
-    double F = 0.0;
-    for (int j = 0; j < m; ++j)
-    {
-        // S_j = ∏_i (1 - p_{ij})  với mọi i có x_{ij}=1
-        double Sj = 1.0;
-        for (int i = 0; i < n; ++i)
-        {
-            if (sol.at(i, j) == 1)
-                Sj *= (1.0 - prob_.uavs[i].pij[j]);
-        }
-        // Đóng góp vào hàm mục tiêu: v_j * (1 - S_j)
-        F += prob_.targets[j].value * (1.0 - Sj);
-    }
-
-    // 3. Penalty cho ràng buộc explosive (thiếu hụt)
-    const double k = 2.0;
-    double penalty = 0.0;
-
-    for (int j = 0; j < m; ++j)
-    {
-        double required = prob_.targets[j].explosive_required;
-        if (required <= 0) continue;
-
-        bool anyAssigned = false;
-        double totalExplosive = 0.0;
-        for (int i = 0; i < n; ++i)
-        {
-            if (sol.at(i, j) == 1)           
-            {
-                totalExplosive += prob_.uavs[i].explosive;
-                anyAssigned = true;
-            }
-        }
-        if (anyAssigned) {
-            double shortage = std::max(0.0, required - totalExplosive);
-            double shortageRatio = shortage / required; // ∈ [0,1]
-            double vj = prob_.targets[j].value;
-            penalty += shortageRatio * vj * k;
-        }
-    }
-
-    sol.fitness = F - penalty;
-}
+      
 
 // Chọn lọc roulette
 AssignmentSolution UAVGAOptimizer::selectParent()
@@ -194,7 +194,7 @@ AssignmentSolution UAVGAOptimizer::selectParent()
     return population_.back();
 }
 
-// Lai ghép 1 điểm (giữ nguyên x, nhưng nhớ copy uavs)
+//lai ghép
 AssignmentSolution UAVGAOptimizer::crossover(const AssignmentSolution& p1, const AssignmentSolution& p2)
 {
     AssignmentSolution child;
@@ -220,7 +220,7 @@ AssignmentSolution UAVGAOptimizer::crossover(const AssignmentSolution& p1, const
     return child;
 }
 
-// Đột biến: tăng/giảm số UAV tại (i,j)
+//Đột biến
 void UAVGAOptimizer::mutate(AssignmentSolution& child)
 {
     int n = child.nUavTypes;
@@ -245,6 +245,8 @@ void UAVGAOptimizer::mutate(AssignmentSolution& child)
         }
     }
 }
+
+
 void UAVGAOptimizer::repair(AssignmentSolution& sol)
 {
     if (sol.x.size() != sol.nUavTypes * sol.nTargets)
@@ -254,13 +256,13 @@ void UAVGAOptimizer::repair(AssignmentSolution& sol)
     int m = sol.nTargets;
     if (n <= 0 || m <= 0) return;
 
-    // ========== 1. Ràng buộc số lượng & ngân sách cho từng UAV ==========
+    // 1. Ràng buộc số lượng & ngân sách cho từng UAV 
     for (int i = 0; i < n; ++i)
     {
 
         const auto& u = prob_.uavs[i];
         int maxCount = u.maxCount;      // = 1 trong bài toán này
-        double cost = u.costPerAttack;
+        double value = u.ValuePerAttack;
 
         // Thu thập các mục tiêu UAV i đang được gán, tính combined score
         struct ScoredTarget {
@@ -268,18 +270,15 @@ void UAVGAOptimizer::repair(AssignmentSolution& sol)
             double score; // = efficiency * priorityWeight
         };
         std::vector<ScoredTarget> assigned;
-  
+
         for (int j = 0; j < m; ++j)
         {
             if (sol.at(i, j) != 1) continue;
 
             double vj = prob_.targets[j].value;
             double pij = u.pij[j];
-            double eff = (cost > 0.0) ? (vj * pij / cost) : (vj * pij);
-
-            int    prio = (prob_.targets[j].Priority > 0) ? prob_.targets[j].Priority : 1;
-            double priorityW = 1.0 / (double)prio;
-            double combined = eff * priorityW;
+            int    prio = (prob_.targets[j].priority > 0) ? prob_.targets[j].priority : 1;
+            double combined = vj * pij / (double)prio;      // score = giá trị × xác suất / độ ưu tiên
 
             assigned.push_back({ j, combined });
         }
@@ -300,9 +299,9 @@ void UAVGAOptimizer::repair(AssignmentSolution& sol)
     std::vector<int> targetOrder(m);
     std::iota(targetOrder.begin(), targetOrder.end(), 0);
     std::sort(targetOrder.begin(), targetOrder.end(), [&](int a, int b) {
-        return prob_.targets[a].Priority < prob_.targets[b].Priority;
+        return prob_.targets[a].priority < prob_.targets[b].priority;
         });
-   
+
     for (int idx = 0; idx < m; ++idx)
     {
         int    j = targetOrder[idx];
@@ -402,6 +401,8 @@ void UAVGAOptimizer::repair(AssignmentSolution& sol)
             if (prob_.uavs[i].aij[j] == 0)
                 sol.at(i, j) = 0;
 }
+
+
 // Chạy GA
 AssignmentSolution UAVGAOptimizer::run()
 {
@@ -435,3 +436,240 @@ AssignmentSolution UAVGAOptimizer::run()
 
     return best;
 }
+
+
+
+OptimizationProblem OptimizationBuilder::build(const UnitUAVList& unitList,
+    const Graph& graph, const std::string& dataDir)
+{
+    OptimizationProblem prob;
+
+    // PHẦN 1: XÂY DỰNG DANH SÁCH MỤC TIÊU
+    const auto& targets = graph.GetTargets();
+    for (const auto& t : targets)
+    {
+        TargetOpt to;
+        to.id = t.target_id;
+        to.code = t.code;
+        to.name = t.name;
+        to.value = t.value;
+        to.x = t.x;
+        to.y = t.y;
+        to.vertexId = t.id_vertex;
+        to.explosive_required = t.explosive;
+        to.priority = t.priority; // Đọc thẳng từ CSV (cột K)
+        prob.targets.push_back(to);         // Chỉ push 1 lần
+
+        std::cout << "[BUILD] Target " << to.id
+            << " \"" << to.name << "\""
+            << " | vertex=" << to.vertexId
+            << " | E_j=" << to.explosive_required
+            << " | v_j=" << to.value
+            << " | priority=" << to.priority << "\n";
+    }
+    int m = (int)prob.targets.size();
+
+    // PHẦN 2: XÂY DỰNG DANH SÁCH UAV TẤN CÔNG
+    const auto& units = unitList.getUnits();
+    for (const auto& unit : units)
+    {
+        for (const auto& u : unit.getUAVs())
+        {
+            // Bỏ qua UAV không có lượng nổ (trinh sát hoặc dữ liệu lỗi)
+            if (u.getExplosive() <= 0.0)
+            {
+                std::cout << "[BUILD] Bo qua UAV " << u.getCode()
+                    << " (explosive=0, khong tham gia GA)\n";
+                continue;
+            }
+
+            UAVTypeOpt opt;
+            opt.id = u.getId();
+            opt.code = u.getCode();
+            opt.explosive = u.getExplosive();
+            opt.ValuePerAttack = u.getCost();
+            opt.maxCount = (u.getQuantity() >= 1) ? u.getQuantity() : 1; 
+            opt.unitIndex = unitList.getUnitIndex(unit.getUnitId());
+            opt.unitName = unit.getUnitName();
+            opt.aij.resize(m, 1);   // Mặc định khả dụng với mọi mục tiêu
+            opt.pij.resize(m, 0.0); // Sẽ load từ Probability.csv
+
+            // ── RANGE CHECK: Tính khoảng cách Dijkstra thực tế ──
+            // Tìm đỉnh xuất phát của đơn vị 
+            int startV = unit.getVertexId();
+            double rangeM = u.getRange(); // Đơn vị: meter (sau khi đã sửa CSV)
+
+            std::cout << "[RANGE] UAV " << opt.code
+                << " (don vi " << opt.unitName << ")"
+                << " | range=" << rangeM / 1000.0 << "km"
+                << " | startV=" << startV << "\n";
+
+            for (int j = 0; j < (int)prob.targets.size(); ++j)
+            {
+                int endV = prob.targets[j].vertexId;
+
+                // Dijkstra: khoảng cách thực tế trên đồ thị (đơn vị meter)
+                double dist = graph.shortestPathDistance(startV, endV);
+
+                // So sánh với range → quyết định a_ij
+                if (dist > rangeM)
+                    opt.aij[j] = 0;
+            }
+
+            prob.uavs.push_back(opt);
+            std::cout << "[BUILD] UAV " << opt.code
+                << " | don_vi=" << opt.unitName
+                << " | explosive=" << opt.explosive
+                << " | value=" << opt.ValuePerAttack << "\n";
+        }
+    }
+
+    int n = (int)prob.uavs.size();
+    std::cout << "[BUILD] Tong: " << n << " UAV tan cong, " << m << " muc tieu\n";
+
+    // PHẦN 3: GÁN XÁC SUẤT p_{ij} TỪ Probability.csv
+    auto pijMap = loadPij(dataDir + "\\Probability.csv");
+
+    for (auto& uav : prob.uavs)
+    {
+        for (int j = 0; j < m; ++j)
+        {
+            std::string key = uav.code + "|" + std::to_string(prob.targets[j].id);
+            uav.pij[j] = pijMap.count(key) ? pijMap[key] : 0.0;
+        }
+    }
+
+    // PHẦN 4: CHẠY GENETIC ALGORITHM
+    int    populationSize = 200;
+    int    maxGenerations = 500;
+    double crossoverRate = 0.85;
+    double mutationRate = 0.1;
+
+    UAVGAOptimizer ga(prob, populationSize, maxGenerations, crossoverRate, mutationRate);
+    AssignmentSolution best = ga.run();
+    std::cout << "[GA] Hoan thanh. Best fitness = " << best.fitness << "\n";
+
+
+    // PHẦN 5: HẬU KỲ — BRUTE-FORCE SUBSET LƯỢNG NỔ
+    // Tìm tập con UAV NHỎ NHẤT (tổng explosive nhỏ nhất) đủ >= E_j
+    // để giải phóng UAV dư cho mục tiêu khác.
+    // O(2^k), k = số UAV/mục tiêu <= 7 → tối đa 128 tập con.
+    for (int j = 0; j < m; ++j)
+    {
+        double Ej = prob.targets[j].explosive_required;
+        if (Ej <= 0.0) continue;
+
+        std::vector<int> assignedUAVs;
+        for (int i = 0; i < n; ++i)
+            if (best.x[i * m + j] == 1 && prob.uavs[i].explosive > 0.0)
+                assignedUAVs.push_back(i);
+
+        int k = (int)assignedUAVs.size();
+        if (k == 0) continue;
+
+        double           minSum = std::numeric_limits<double>::max();
+        std::vector<int> bestSubset;
+
+        for (int mask = 1; mask < (1 << k); ++mask)
+        {
+            double           sum = 0.0;
+            std::vector<int> subset;
+            for (int t = 0; t < k; ++t)
+            {
+                if (mask & (1 << t))
+                {
+                    sum += prob.uavs[assignedUAVs[t]].explosive;
+                    subset.push_back(assignedUAVs[t]);
+                }
+            }
+            if (sum >= Ej && sum < minSum)
+            {
+                minSum = sum;
+                bestSubset = subset;
+            }
+        }
+
+        for (int iUAV : assignedUAVs)
+        {
+            bool keep = (std::find(bestSubset.begin(), bestSubset.end(), iUAV)
+                != bestSubset.end());
+            best.x[iUAV * m + j] = keep ? 1 : 0;
+        }
+
+        if (bestSubset.empty())
+        {
+            std::cout << "[SUBSET] CANH BAO: " << prob.targets[j].name
+                << " khong du UAV du luong no E_j=" << Ej << " → huy.\n";
+            for (int i = 0; i < n; ++i)
+                best.x[i * m + j] = 0;
+        }
+        else
+        {
+            std::cout << "[SUBSET] " << prob.targets[j].name
+                << " | E_j=" << Ej
+                << " | No hop le=" << minSum
+                << " | " << bestSubset.size() << " UAV\n";
+        }
+    }
+
+    // PHẦN 6: TÍNH ĐƯỜNG BAY DIJKSTRA → best.paths[i][j]
+     // Với mỗi UAV tấn công i được gán mục tiêu j:
+     //   path = shortestPath(startV_đơn_vị → vertexId_mục_tiêu)
+    best.paths.resize(n, std::vector<std::vector<int>>(m));
+
+    for (int i = 0; i < n; ++i)
+    {
+        const UAVTypeOpt& uav = prob.uavs[i];
+        const UnitUAV& unit = unitList.getUnit(uav.unitIndex);
+
+        // Đỉnh xuất phát: đỉnh gần nhất với tọa độ căn cứ đơn vị.
+        int startV = unit.getVertexId();
+
+        for (int j = 0; j < m; ++j)
+        {
+            if (best.x[i * m + j] != 1) continue; // UAV i không đánh mục tiêu j
+
+            int endV = prob.targets[j].vertexId;
+
+            // Dijkstra: căn cứ đơn vị → mục tiêu j
+            std::vector<int> path = graph.shortestPath(startV, endV);
+
+            if (path.empty())
+            {
+                // Fallback: đường thẳng 2 đỉnh nếu Dijkstra thất bại
+                // (Nguyên nhân thường gặp: cạnh chưa nối 2 chiều trong Edge.csv)
+                std::cout << "[DIJKSTRA] CANH BAO: Khong tim duoc duong "
+                    << startV << "→" << endV
+                    << " (UAV " << uav.code << " → " << prob.targets[j].name << ")\n"
+                    << "  CHECK: ReadEdgesFile() da goi AddEdge(eV,sV,w) 2 chieu chua?\n";
+                path = { startV, endV };
+            }
+
+            best.paths[i][j] = path;
+
+            // Log chi tiết đường bay để verify
+            std::cout << "[DIJKSTRA] " << uav.code
+                << " (" << uav.unitName << ")"
+                << " TAN CONG " << prob.targets[j].name
+                << " | " << startV << "→" << endV
+                << " | " << path.size() << " dinh: [";
+            for (int vi = 0; vi < (int)path.size(); ++vi)
+                std::cout << path[vi] << (vi + 1 < (int)path.size() ? "→" : "");
+            std::cout << "]\n";
+        }
+    }
+
+    // PHẦN 7: GÁN KẾT QUẢ VÀO prob.bestSolution
+    best.unitIndex.resize(n);
+    for (int i = 0; i < n; ++i)
+        best.unitIndex[i] = prob.uavs[i].unitIndex;
+
+    prob.bestSolution.x = best.x;
+    prob.bestSolution.fitness = best.fitness;
+    prob.bestSolution.paths = best.paths;
+    prob.bestSolution.unitIndex = best.unitIndex;
+    prob.bestSolution.nUavTypes = best.nUavTypes;
+    prob.bestSolution.nTargets = best.nTargets;
+    return prob;
+}
+

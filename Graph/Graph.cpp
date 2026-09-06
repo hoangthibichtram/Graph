@@ -45,13 +45,6 @@ namespace
         }
     }
 
-   /* static inline bool IsNumberStart(const std::string& s)
-    {
-        if (s.empty()) return false;
-        char c = s.front();
-        return (c >= '0' && c <= '9') || c == '-' || c == '+';
-    }*/
-
     // Parse CSV line with simple quoted field handling
     static inline std::vector<std::string> ParseCsvLine(const std::string& line, char delim)
     {
@@ -105,36 +98,6 @@ bool Graph::AddEdge(const Vertex& start, const Vertex& end, float weight)
     return true;
 }
 
-bool Graph::AddVertex(int id, double x, double y, double z, float radius, int* outConnections, bool verbose)
-{
-    if (outConnections) *outConnections = 0;
-    if (idIndexMap_.find(id) != idIndexMap_.end())
-    {
-        if (verbose) std::cout << "Vertex with id " << id << " already exists. Skipping.\n";
-        return false;
-    }
-
-    std::size_t before = edges_.size();
-    vertices_.emplace_back(id, x, y, z);
-    idIndexMap_[id] = vertices_.size() - 1;
-
-    for (std::size_t i = 0; i + 1 < vertices_.size(); ++i)
-    {
-        const Vertex& other = vertices_[i];
-        double dist = vertices_.back().distanceTo(other);
-        if (dist <= static_cast<double>(radius))
-        {
-            AddEdge(vertices_.back(), other, static_cast<float>(dist));
-            AddEdge(other, vertices_.back(), static_cast<float>(dist));
-        }
-    }
-
-    int added = static_cast<int>(edges_.size() - before);
-    if (outConnections) *outConnections = added;
-    if (verbose) std::cout << "Added " << added << " connections for vertex id=" << id << ".\n";
-    return true;
-}
-
 Vertex* Graph::findVertexById(int id) noexcept
 {
     auto it = idIndexMap_.find(id);
@@ -143,19 +106,6 @@ Vertex* Graph::findVertexById(int id) noexcept
     if (idx >= vertices_.size()) return nullptr;
     return &vertices_[idx];
 }
-
-std::vector<Vertex> Graph::findVerticesInRadius(double x, double y, double z, double radius) const
-{
-    std::vector<Vertex> result;
-    for (const auto& v : vertices_)
-    {
-        double dist = std::sqrt((v.x - x) * (v.x - x) + (v.y - y) * (v.y - y) + (v.z - z) * (v.z - z));
-        if (dist <= radius) result.push_back(v);
-    }
-    return result;
-}
-
-// --- Specific CSV readers ---
 
 bool Graph::ReadVerticesFile(const std::string& path)
 {
@@ -328,6 +278,24 @@ bool Graph::ReadTargetFile(const std::string& path)
     if (!std::getline(ifs, header)) return false;
 
     char delim = DetectDelimiter(header);
+    RemoveUTF8BOM(header);
+    auto hdr = ParseCsvLine(header, delim);
+    std::unordered_map<std::string, size_t> hidx;
+    for (size_t i = 0; i < hdr.size(); ++i) hidx[ToLower(hdr[i])] = i;
+
+    auto col = [&](std::initializer_list<const char*> names)->int {
+        for (auto n : names) { auto it = hidx.find(ToLower(n)); if (it != hidx.end()) return (int)it->second; }
+        return -1;
+        };
+    int iX = col({ "x" });
+    int iY = col({ "y" });
+    int iTid = col({ "target_id","id" });
+    int iCode = col({ "code" });
+    int iName = col({ "name" });
+    int iPrio = col({ "priority" });
+    int iExp = col({ "explosive" });
+    int iVal = col({ "military_value" });
+    int iVtx = col({ "id_vertex","vertexid" });
 
     std::string line;
     while (std::getline(ifs, line))
@@ -341,40 +309,29 @@ bool Graph::ReadTargetFile(const std::string& path)
 
         try
         {
-            // MIỄN LÀ CÓ TỪ 9 CỘT TRỞ LÊN, CHÚNG TA ĐỀU LẤY VÀO (Chống gõ thiếu cột cuối)
             if (tok.size() >= 9)
             {
                 Target t{};
-                // Dùng hàm try-catch nhỏ lẻ cho từng biến để nếu chết 1 ô X thì ko hỏng nguyên hàng
-                t.x = (tok[0].empty()) ? 0.0 : std::stod(tok[0]);
-                t.y = (tok[1].empty()) ? 0.0 : std::stod(tok[1]);
-                t.target_id = (tok[2].empty()) ? 0 : std::stoi(tok[2]);
-                t.code = Trim(tok[3]);
-                t.name = Trim(tok[4]);
+                auto get = [&](int idx)->std::string {
+                    return (idx >= 0 && idx < (int)tok.size()) ? tok[idx] : std::string();
+                    };
 
-                t.altitude = (tok[5].empty()) ? 0.0f : std::stof(tok[5]);
-                t.explosize = (tok[6].empty()) ? 0.0f : std::stof(tok[6]);
-                t.value_usd = (tok[7].empty()) ? 0.0 : std::stod(tok[7]);
+                t.x = get(iX).empty() ? 0.0 : std::stod(get(iX));
+                t.y = get(iY).empty() ? 0.0 : std::stod(get(iY));
+                t.target_id = get(iTid).empty() ? 0 : std::stoi(get(iTid));
+                t.code = Trim(get(iCode));
+                t.name = Trim(get(iName));
+                t.explosive = get(iExp).empty() ? 0.0f : std::stof(get(iExp));
+                t.value = get(iVal).empty() ? 0.0 : std::stod(get(iVal)); 
+                t.id_vertex = get(iVtx).empty() ? 0 : std::stoi(get(iVtx));
+                t.priority = get(iPrio).empty() ? 1 : std::stoi(get(iPrio));
 
-                // Ô CHỐT THÍ: ID_VERTEX LÀ CỘT THỨ 8 (Tính từ 0)
-                t.id_vertex = (tok[8].empty()) ? 0 : std::stoi(tok[8]);
-
-                // Cột 9: typeVertex (giữ nguyên)
-                if (tok.size() >= 10 && !tok[9].empty()) t.typeVertex = Trim(tok[9]);
-                else t.typeVertex = "target";
-
-                if (tok.size() >= 11 && !tok[10].empty())
-                    t.Priority = std::stoi(tok[10]);
-                else
-                    t.Priority = 1; // fallback an toàn nếu thiếu cột
-
+                // Lấy tọa độ thật từ đỉnh (giữ nguyên như cũ)
                 Vertex* vNode = findVertexById(t.id_vertex);
                 if (vNode != nullptr) {
                     t.x = vNode->x;
                     t.y = vNode->y;
                 }
-                // -----------------------------------------------------------
-
                 targets_.push_back(std::move(t));
                 std::cout << "[TARGET THANH CONG] Bat duoc: " << t.name << " dinh: " << t.id_vertex << "\n";
             }
@@ -387,18 +344,6 @@ bool Graph::ReadTargetFile(const std::string& path)
         }
     }
     return true;
-}
-
-bool Graph::ReadFromFile(const std::string& path)
-{
-    std::string lower = ToLower(path);
-    if (lower.find("vertex") != std::string::npos) return ReadVerticesFile(path);
-    if (lower.find("edge") != std::string::npos) return ReadEdgesFile(path);
-    if (lower.find("target") != std::string::npos) return ReadTargetFile(path);
-
-    if (ReadVerticesFile(path)) return true;
-    if (ReadEdgesFile(path)) return true;
-    return false;
 }
 
 bool Graph::readAllData(const std::string& unitFile,
@@ -499,34 +444,3 @@ std::vector<int> Graph::shortestPath(int startId, int endId) const
     std::reverse(path.begin(), path.end());
     return path;
 }
-
-int Graph::findNearestVertex(double x, double y) const
-{
-    double best = 1e18;
-    int bestId = -1;
-
-    for (const auto& v : vertices_) {
-        double dx = v.x - x;
-        double dy = v.y - y;
-        double d = dx * dx + dy * dy;
-        if (d < best) {
-            best = d;
-            bestId = v.id;
-        }
-    }
-    return bestId;
-}
-// thu hồi ở đây
-void Graph::removeVertexZero()
-{
-    auto it = idIndexMap_.find(0);
-    if (it != idIndexMap_.end()) {
-        int index = it->second;
-        vertices_.erase(vertices_.begin() + index);
-        idIndexMap_.erase(it);
-
-        for (size_t i = 0; i < vertices_.size(); i++) {
-            idIndexMap_[vertices_[i].id] = static_cast<int>(i);
-        }
-    }
-}// xóa ở đây nha

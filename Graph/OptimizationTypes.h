@@ -1,9 +1,6 @@
 #pragma once
-#pragma once
 #include <vector>
 #include <string>
-#include "UAVOptimization.h"
-
 
 struct TargetOpt
 {
@@ -15,7 +12,7 @@ struct TargetOpt
     int vertexId;
     std::string type;
     double explosive_required; // Lượng nổ cần thiết để tiêu diệt mục tiêu
-    int Priority;
+    int priority;
 
 };
 
@@ -23,14 +20,25 @@ struct UAVTypeOpt
 {
     int id;
     std::string code;
-    double costPerAttack;
     int maxCount;
-    double maxBudget;
     int unitIndex;
+    double ValuePerAttack;
     std::string unitName;
     std::vector<int> aij;     // khả dụng
     std::vector<double> pij;  // xác suất
     double explosive;
+};
+
+struct AssignmentSolution {
+    int nUavTypes{};
+    int nTargets{};
+    std::vector<int> x;
+    double fitness{};
+    std::vector<int> unitIndex;
+    std::vector<std::vector<std::vector<int>>> paths;
+
+    int at(int i, int j) const { return x[i * nTargets + j]; }
+    int& at(int i, int j) { return x[i * nTargets + j]; }
 };
 
 class OptimizationProblem
@@ -40,6 +48,4 @@ public:
     std::vector<UAVTypeOpt> uavs;
 
     AssignmentSolution bestSolution;
-
-    double evaluate(const AssignmentSolution& sol) const;
 };

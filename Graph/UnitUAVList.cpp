@@ -1,5 +1,5 @@
 #include "UnitUAVList.h"
-#include "OptimizationProblem.h"
+//#include "OptimizationTypes.h"
 #include <fstream>
 #include <sstream>
 #include <algorithm>
@@ -8,10 +8,6 @@
 // Local helpers (consistent with other CSV readers)
 namespace
 {
-
-
-
-
     static inline std::string Trim(const std::string& s)
     {
         if (s.empty()) return s;
@@ -100,7 +96,6 @@ const UnitUAV* UnitUAVList::getUnitById(const std::string& unit_id) const noexce
     return &units_[it->second];
 }
 
-
 // Đọc danh sách đơn vị từ file CSV (UnitUAV.csv)
 // File header được tìm theo tên cột linh hoạt: unit_id, unit_name, x, y, z
 bool UnitUAVList::loadUnitsFromFile(const std::string& path)
@@ -139,7 +134,7 @@ bool UnitUAVList::loadUnitsFromFile(const std::string& path)
     int idxX = get({ "x","lon","longitude" });
     int idxY = get({ "y","lat","latitude" });
     int idxZ = get({ "z","alt","altitude" });
-
+    int idxVtx = get({ "id_vertex","vertexid","idvertex" });
     std::string line;
     int added = 0;
     while (std::getline(ifs, line))
@@ -175,6 +170,9 @@ bool UnitUAVList::loadUnitsFromFile(const std::string& path)
                     << " y=" << y
                     << " z=" << z << "\n";
 
+                if (idxVtx >= 0 && idxVtx < (int)tok.size())
+                    u.setVertexId(std::stoi(tok[idxVtx]));
+
                 units_.push_back(std::move(u));
                 unit_index_map_[u_id] = units_.size() - 1;
                 ++added;
@@ -191,46 +189,6 @@ bool UnitUAVList::loadUnitsFromFile(const std::string& path)
     }
 
     return added > 0;
-}
-
-// Đọc các file UAV riêng cho từng đơn vị trong thư mục.
-// Mỗi file có tên: prefix + unit_id + ext
-// Ví dụ: folder="data", prefix="UAV_", ext=".csv" -> "data/UAV_SQ1.csv"
-bool UnitUAVList::loadUAVsFromPerUnitFiles(const std::string& folder,
-    const std::string& prefix,
-    const std::string& ext)
-{
-    bool anyAdded = false;
-
-    for (auto& unit : units_)
-    {
-        std::string filename = folder;
-        if (!filename.empty() && filename.back() != '/' && filename.back() != '\\')
-            filename.push_back('/');
-        filename += "data_uav_" + unit.getUnitId() + ext;
-
-        if (unit.readUAVsFromFile(filename))
-        {
-            // ⭐ CHUYỂN UAV từ UnitUAV → UAVTypeOpt
-            for (const auto& u : unit.getUAVs())
-            {
-                UAVTypeOpt opt;
-                opt.id = u.getId();
-                opt.code = u.getCode();
-                opt.costPerAttack = u.getCostUsd();
-                opt.maxCount = 1;
-                opt.maxBudget = u.getCostUsd();
-                opt.unitIndex = unit_index_map_[unit.getUnitId()];
-                opt.unitName = unit.getUnitName();
-
-                // Khởi tạo vector aij/pij theo số mục tiêu (tạm để trống, OptimizationBuilder sẽ fill)
-            }
-
-            anyAdded = true;
-        }
-    }
-
-    return anyAdded;
 }
 
 
@@ -262,11 +220,11 @@ bool UnitUAVList::loadUAVsFromCombinedFile(const std::string& path)
         return -1;
         };
 
-    // Tìm index từng cột — chấp nhận cả "explosize" lẫn "explosive"
     int iId = col({ "uav_id","id" });
     int iCode = col({ "uav_code","code" });
     int iType = col({ "uav_type","type" });
     int iRange = col({ "range" });
+    int iQty = col({ "quantity","qty" });
     int iSpeed = col({ "speed" });
     int iWeapon = col({ "weapon" });
     int iExp = col({ "explosive","explosize","expl" });
@@ -305,11 +263,12 @@ bool UnitUAVList::loadUAVsFromCombinedFile(const std::string& path)
             if (iCode >= 0) u.setCode(tok[iCode]);
             if (iType >= 0) u.setType(tok[iType]);
             if (iRange >= 0) u.setRange(std::stof(tok[iRange]));
+            if (iQty >= 0) u.setQuantity(std::stoi(tok[iQty]));
             if (iSpeed >= 0) u.setSpeed(std::stof(tok[iSpeed]));
             if (iWeapon >= 0) u.setWeapon(tok[iWeapon]);
             if (iExp >= 0) u.setExplosize(std::stof(tok[iExp]));
             if (iRadius >= 0) u.setRadius(std::stof(tok[iRadius]));
-            if (iCost >= 0) u.setCostUsd(std::stod(tok[iCost]));
+            if (iCost >= 0) u.setCost(std::stod(tok[iCost]));
             u.setUnitId(unitId);
 
             unit->addUAV(u);
@@ -318,7 +277,7 @@ bool UnitUAVList::loadUAVsFromCombinedFile(const std::string& path)
             std::cout << "[UAV] " << u.getCode()
                 << " -> don vi " << unitId
                 << " | explosive=" << u.getExplosive()
-                << " | cost=" << u.getCostUsd() << "\n";
+                << " | value=" << u.getCost() << "\n";
         }
         catch (...) {
             std::cout << "[UAV] LOI parse dong: " << line << "\n";

@@ -126,12 +126,11 @@
     <ClInclude Include="framework.h" />
     <ClInclude Include="Graph.h" />
     <ClInclude Include="GraphRenderer.h" />
-    <ClInclude Include="OptimizationBuilder.h" />
-    <ClInclude Include="OptimizationProblem.h" />
+    <ClInclude Include="Optimization.h" />
+    <ClInclude Include="OptimizationTypes.h" />
     <ClInclude Include="Resource.h" />
     <ClInclude Include="targetver.h" />
     <ClInclude Include="UAVMissionEngine.h" />
-    <ClInclude Include="UAVOptimization.h" />
     <ClInclude Include="UnitUAV.h" />
     <ClInclude Include="UnitUAVList.h" />
   </ItemGroup>
@@ -139,10 +138,8 @@
     <ClCompile Include="Graph.cpp" />
     <ClCompile Include="GraphRenderer.cpp" />
     <ClCompile Include="Main.cpp" />
-    <ClCompile Include="OptimizationBuilder.cpp" />
-    <ClCompile Include="OptimizationProblem.cpp" />
+    <ClCompile Include="Optimization.cpp" />
     <ClCompile Include="UAVMissionEngine.cpp" />
-    <ClCompile Include="UAVOptimization.cpp" />
     <ClCompile Include="UnitUAV.cpp" />
     <ClCompile Include="UnitUAVList.cpp" />
   </ItemGroup>

@@ -36,16 +36,13 @@
     <ClInclude Include="GraphRenderer.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="UAVOptimization.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="OptimizationBuilder.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="OptimizationProblem.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="UAVMissionEngine.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="OptimizationTypes.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Optimization.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>
@@ -62,19 +59,13 @@
     <ClCompile Include="GraphRenderer.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="UAVOptimization.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="OptimizationBuilder.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="OptimizationProblem.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="UAVMissionEngine.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="Main.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="Optimization.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>

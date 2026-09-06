@@ -64,21 +64,20 @@ struct Target
     std::string name;
     double x;
     double y;
-    float altitude;
-    float explosize;
-    double value_usd;
+    float z;
+    float explosive;
+    double value;
     int id_vertex;
-    std::string typeVertex;
-	int Priority=1;
+	int priority=1;
 };
 
 class Graph
 {
 public:
     Graph() = default;
-    void removeVertexZero();
+    //void removeVertexZero();
     // Generic CSV read (kept for compatibility)
-    bool ReadFromFile(const std::string& path);
+   // bool ReadFromFile(const std::string& path);
 
     // Specific readers requested
     bool ReadVerticesFile(const std::string& path);  
@@ -94,7 +93,7 @@ public:
         const std::string& targetFile,
         const std::string& uavFile);
 
-    int findNearestVertex(double x, double y) const;
+   // int findNearestVertex(double x, double y) const;
     double shortestPathDistance(int startId, int endId) const;
     std::vector<int> shortestPath(int startId, int endId) const;
 
@@ -103,7 +102,7 @@ public:
     const UnitUAVList& getUnitList() const { return unitList; }
 
     // Add a vertex with the given id and coordinates.
-    bool AddVertex(int id, double x, double y, double z, float radius, int* outConnections = nullptr, bool verbose = false);
+   // bool AddVertex(int id, double x, double y, double z, float radius, int* outConnections = nullptr, bool verbose = false);
 
     // Accessors
     const std::vector<Vertex>& GetVertices() const noexcept { return vertices_; }
@@ -119,7 +118,7 @@ public:
     Vertex* findVertexById(int id) noexcept;
 
     // Find vertices within radius of point (x,y,z). Returns copies of matching vertices.
-    std::vector<Vertex> findVerticesInRadius(double x, double y, double z, double radius) const;
+   // std::vector<Vertex> findVerticesInRadius(double x, double y, double z, double radius) const;
     //hàm tính khoảng cách giữa 2 vertex (dùng cho kiểm tra khi thêm vertex mới)
     static double ComputeDistance(const Vertex& a, const Vertex& b)
     {

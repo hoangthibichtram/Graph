@@ -23,7 +23,6 @@ namespace UAVCore {
             config.edgeFile, config.targetFile, config.uavFile);
         if (success) {
             PrintLog("[UAVMissionEngine] TAI DU LIEU HOAN TAT THANH CONG.");
-            ConnectUnitsToGraph();
             SetupDefaultDisplayStates();
         }
         else PrintLog("[UAVMissionEngine] LOI nap file CSV!");
@@ -34,18 +33,19 @@ namespace UAVCore {
     bool UAVMissionEngine::InitEngineFromDirectory(const std::string& dataDirectory)
     {
         EngineConfig config;
+        m_dataDir = dataDirectory;
         config.unitFile = dataDirectory + "\\UnitUAV.csv";
         config.vertexFile = dataDirectory + "\\Vertex.csv";
         config.edgeFile = dataDirectory + "\\Edge.csv";
         config.targetFile = dataDirectory + "\\Data_target.csv";
-        config.uavFile = dataDirectory + "\\data_uav_full.csv";
+        config.uavFile = dataDirectory + "\\Data_UAV.csv";
         return InitEngine(config);
     }
 
     bool UAVMissionEngine::RunOptimization()
     {
         PrintLog("\n[UAVMissionEngine] ---> KHOI DONG MODULE TOI UU HOA...");
-        m_problem = OptimizationBuilder::build(m_graph.getUnitList(), m_graph);
+        m_problem = OptimizationBuilder::build(m_graph.getUnitList(), m_graph, m_dataDir);
         m_bestSolution = m_problem.bestSolution;
         PrintLog("[UAVMissionEngine] HOAN TAT TOI UU HOA.");
         return true;
@@ -107,7 +107,7 @@ namespace UAVCore {
 
         stats.targetDamagePercents.resize(targets.size(), 0.0f);
         for (const auto& t : targets) {
-            stats.totalTargetValue += t.value_usd;
+            stats.totalTargetValue += t.value;
             stats.targetNames.push_back(t.name);
         }
 
@@ -126,7 +126,7 @@ namespace UAVCore {
             for (size_t i = 0; i < m_bestSolution.paths.size(); ++i) {
                 const UAV* currentUav = (i < allUAVs.size()) ? allUAVs[i] : nullptr;
                 bool isThisUAVDeployed = false;
-                double uavCost = (currentUav != nullptr) ? currentUav->getCostUsd() : 0.0;
+                double uavCost = (currentUav != nullptr) ? currentUav->getCost() : 0.0;
 
                 const auto& targetsPathForUAVType = m_bestSolution.paths[i];
                 for (size_t j = 0; j < targetsPathForUAVType.size(); ++j) {
@@ -151,7 +151,7 @@ namespace UAVCore {
             for (size_t j = 0; j < targets.size(); ++j) {
                 double killProb = 1.0 - targetMissProb[j];
                 stats.targetDamagePercents[j] = (float)(killProb * 100.0);
-                stats.expectedDestroyedValue += (targets[j].value_usd * killProb);
+                stats.expectedDestroyedValue += (targets[j].value * killProb);
                 if (killProb > 0.5) stats.totalTargetsHit++;
             }
         }
@@ -162,43 +162,7 @@ namespace UAVCore {
 
         return stats;
     }
-    void UAVMissionEngine::ConnectUnitsToGraph()
-    {
-        // Ta sẽ coi mỗi Đơn vị như là 1 trạm Vertex ảo, đặt ID bắt đầu từ 10000 
-        // để không bị trùng lặp với các điểm point số 1, 2, 3... trong CSV có sẵn
-        int unitBaseId = 10000;
-
-        for (const auto& unit : m_graph.getUnitList().getUnits())
-        {
-            // 1. Tìm xem cái đỉnh nào của bản đồ đang nằm gần căn cứ này nhất
-            int nearestVId = m_graph.findNearestVertex(unit.getX(), unit.getY());
-
-            double connectRadius = 100.0; // Bán kính kết nối mặc định
-
-            if (nearestVId != -1) {
-                // 2. Tính khoảng cách từ căn cứ Unit tới điểm gần nhất
-                Vertex nearestV = m_graph.GetVertexById(nearestVId);
-                double dx = unit.getX() - nearestV.x;
-                double dy = unit.getY() - nearestV.y;
-                double distToNearest = std::sqrt(dx * dx + dy * dy);
-
-                // Cài đặt bán kính kết nối bao trùm ít nhất 1.5 lần khoảng cách 
-                // để luôn gắn được ít nhất vài đường dây vào các trạm xung quanh
-                if ((distToNearest * 1.5) > connectRadius) {
-                    connectRadius = distToNearest * 1.5;
-                }
-            }
-
-            // 3. Phép thuật ở đây: Chúng ta gọi AddVertex của Graph.
-            // Hàm AddVertex của bạn tự động có chức năng tạo Edge nối tới mọi điểm lân cận trong bán kính Radius!
-            m_graph.AddVertex(unitBaseId, unit.getX(), unit.getY(), 0.0, static_cast<float>(connectRadius), nullptr, false);
-
-            unitBaseId++; // Tăng ID cho Đơn vị tiếp theo
-        }
-
-        PrintLog("[UAVMissionEngine] Da giang day duong bay ket noi cac Base (Unit) vao Mang luoi!");
-    }
-
+    
     void UAVMissionEngine::PrintAssignmentReport(std::ostream& os) const
     {
         const auto& uavs = m_problem.uavs;

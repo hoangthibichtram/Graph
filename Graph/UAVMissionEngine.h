@@ -3,8 +3,8 @@
 #include <functional>
 #include <unordered_map>
 #include "Graph.h"
-#include "OptimizationProblem.h"
-#include "OptimizationBuilder.h"
+#include "OptimizationTypes.h"
+#include "Optimization.h"
 
 namespace UAVCore {
 
@@ -87,7 +87,9 @@ namespace UAVCore {
         void PrintLog(const std::string& msg);
 
         // Tự động giăng dây đường bay cho các căn cứ (Bạn mới thêm)
-        void ConnectUnitsToGraph();
+        //oid ConnectUnitsToGraph();
+
+        std::string m_dataDir;
 
         Graph m_graph;
         OptimizationProblem m_problem;

@@ -12,15 +12,9 @@ public:
 
     bool loadUnitsFromFile(const std::string& path);
     bool loadUAVsFromCombinedFile(const std::string& path);
-    bool loadUAVsFromPerUnitFiles(const std::string& folder,
-        const std::string& prefix = "UAV_",
-        const std::string& ext = ".csv");
-
     int getTotalUAVCount() const;
-
     UnitUAV* getUnitById(const std::string& unit_id) noexcept;
     const UnitUAV* getUnitById(const std::string& unit_id) const noexcept;
-
     const std::vector<UnitUAV>& getUnits() const noexcept { return units_; }
     int getUnitCount() const noexcept { return (int)units_.size(); }
     const UnitUAV& getUnit(size_t index) const;

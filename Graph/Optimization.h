@@ -1,20 +1,8 @@
 #pragma once
-#include <vector>
-#include <string>
+#include "OptimizationTypes.h"
+#include "UnitUAVList.h"
+#include "Graph.h"
 
-class OptimizationProblem;
-
-struct AssignmentSolution {
-    int nUavTypes{};
-    int nTargets{};
-    std::vector<int> x;
-    double fitness{};
-    std::vector<int> unitIndex;
-    std::vector<std::vector<std::vector<int>>> paths;
-
-    int at(int i, int j) const { return x[i * nTargets + j]; }
-    int& at(int i, int j) { return x[i * nTargets + j]; }
-};
 
 class UAVGAOptimizer
 {
@@ -28,7 +16,7 @@ public:
     AssignmentSolution run();
 
 private:
-    const OptimizationProblem& prob_;  
+    const OptimizationProblem& prob_;
     int popSize_;
     int maxGen_;
     double pc_;
@@ -42,4 +30,11 @@ private:
     AssignmentSolution crossover(const AssignmentSolution& p1, const AssignmentSolution& p2);
     void mutate(AssignmentSolution& child);
     void repair(AssignmentSolution& sol);
+};
+
+class OptimizationBuilder
+{
+public:
+    static OptimizationProblem build(const UnitUAVList& unitList,
+        const Graph& graph, const std::string& dataDir);
 };

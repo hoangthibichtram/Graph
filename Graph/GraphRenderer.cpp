@@ -102,7 +102,7 @@ void GraphRenderer::drawAssignment(HDC hdc, RECT clientRect)
     }
 }
 
-void GraphRenderer::draw(HDC hdc, RECT clientRect)
+void GraphRenderer::drawDashboard(HDC hdc, RECT clientRect)
 {
     ensureBoundsCalculated();
     int w = clientRect.right - clientRect.left;
@@ -126,18 +126,18 @@ void GraphRenderer::draw(HDC hdc, RECT clientRect)
     // VẼ BÁO CÁO PHÂN TÍCH CHIẾN DỊCH 
     if (m_engine != nullptr) {
         UAVCore::MissionStatistics stats = m_engine->GetMissionStatistics();
-        std::wstring dashboardText = L"--- BAO CAO PHAN TICH CHIEN DICH ---\n";
+        std::wstring dashboardText = L"--- BÁO CÁO PHÂN TÍCH CHIẾN DỊCH ---\n";
 
-        dashboardText += L"[1] Tong gia tri muc tieu quan dich (Diem Max): " + std::to_wstring((int)stats.totalTargetValue) + L" $\n";
-        dashboardText += L"[2] Uoc tinh sat thuong gay ra (Ky vong Pij): " + std::to_wstring((int)stats.expectedDestroyedValue) + L" $\n";
-        dashboardText += L"[3] Chi phi trien khai luc luong (Gia UAV): " + std::to_wstring((int)stats.ourLossCost) + L" $\n";
+        dashboardText += L"[1] Tổng giá trị mục tiêu (Value target) : " + std::to_wstring((int)stats.totalTargetValue) + L" $\n";
+        dashboardText += L"[2] Ước tính sát thương gây ra (Kỳ vọng Pij): " + std::to_wstring((int)stats.expectedDestroyedValue) + L" $\n";
+        dashboardText += L"[3] Chi phí triển khai lực lượng (Value UAV): " + std::to_wstring((int)stats.ourLossCost) + L" $\n";
 
         int netProfit = (int)(stats.expectedDestroyedValue - stats.ourLossCost);
-        std::wstring profitStatus = (netProfit > 0) ? L" (LAI)" : L" (LO)";
-        dashboardText += L"[4] Loi nhuan/Thiet hai: " + std::to_wstring(netProfit) + L" $" + profitStatus + L"\n";
-        dashboardText += L"[5] Muc do tieu diet Can cu Dich: " + std::to_wstring((int)stats.successRate) + L" %\n";
-        dashboardText += L"[6] So diem muc tieu da danh: " + std::to_wstring(stats.totalTargetsHit) + L"\n";
-        dashboardText += L"[7] Tong UAV tham chien: " + std::to_wstring(stats.totalUAVDeployed) + L" UAV.\n";
+        std::wstring profitStatus = (netProfit > 0) ? L" (LÃI)" : L" (LỖ)";
+        dashboardText += L"[4] Lợi nhuận/Thiệt hại: " + std::to_wstring(netProfit) + L" $" + profitStatus + L"\n";
+        dashboardText += L"[5] Mức độ tiêu diệt căn cứ địch: " + std::to_wstring((int)stats.successRate) + L" %\n";
+        dashboardText += L"[6] Số mục tiêu đã tấn công: " + std::to_wstring(stats.totalTargetsHit) + L"\n";
+        dashboardText += L"[7] Số UAV tham chiến: " + std::to_wstring(stats.totalUAVDeployed) + L" UAV.\n";
 
         SetBkMode(hdc, TRANSPARENT);
         SetTextColor(hdc, RGB(255, 255, 255));
@@ -190,7 +190,7 @@ void GraphRenderer::draw(HDC hdc, RECT clientRect)
             DeleteObject(boxBrush);
 
             std::wstring label = std::wstring(unitName.begin(), unitName.end());
-            label += isVisible ? L" (Hien)" : L" (An)";
+            label += isVisible ? L" (Hiện)" : L" (Ẩn)";
             SetTextColor(hdc, isVisible ? RGB(255, 255, 255) : RGB(150, 150, 150));
 
             RECT textRect = { panelX + 40, yOffset - 2, w - 10, yOffset + lineHeight };
@@ -198,6 +198,92 @@ void GraphRenderer::draw(HDC hdc, RECT clientRect)
         }
     }
 }
+
+
+void GraphRenderer::drawChart(HDC hdc, const RECT& rect, const UAVCore::MissionStatistics& stats) {
+    HBRUSH bgBrush = CreateSolidBrush(RGB(40, 40, 40));
+    FillRect(hdc, &rect, bgBrush);
+    DeleteObject(bgBrush);
+
+    SetBkMode(hdc, TRANSPARENT);
+    SetTextColor(hdc, RGB(255, 255, 255));
+    TextOutA(hdc, 20, 20, "--- BIỂU ĐỒ: MỨC TIÊU DIỆT (ĐỎ) VÀ SỐNG SÓT (XANH) THEO TỪNG MỤC TIÊU ---", 70);
+
+    // Vẽ trục X và Y
+    HPEN axisPen = CreatePen(PS_SOLID, 2, RGB(200, 200, 200));
+    SelectObject(hdc, axisPen);
+
+    // Lùi trục X lên cao chút dể lấy nhiều đất cho chữ zíc zắc
+    int startX = 60, startY = rect.bottom - 80;
+    int maxH = startY - 60; // Chiều cao tuyệt đối của một cột 100%
+    if (maxH < 50) maxH = 50;
+
+    MoveToEx(hdc, startX, startY, nullptr); LineTo(hdc, rect.right - 20, startY); // Trục X
+    MoveToEx(hdc, startX, startY, nullptr); LineTo(hdc, startX, 40); // Trục Y
+    DeleteObject(axisPen);
+
+    int barWidth = 40;
+    int gap = 60; // Nới rộng khoảng cách giữa các cột ra!
+
+    HBRUSH redBrush = CreateSolidBrush(RGB(220, 40, 40));   // ĐỎ là Tiêu diệt
+    HBRUSH greenBrush = CreateSolidBrush(RGB(40, 200, 40)); // XANH là Sống sót
+
+    for (size_t i = 0; i < stats.targetDamagePercents.size(); ++i) {
+        int rectLeft = startX + 30 + (int)i * (barWidth + gap);
+        int rectRight = rectLeft + barWidth;
+
+        // Mức sát thương (Màu đỏ, Vẽ từ dưới đáy đi lên)
+        float dmgPercent = stats.targetDamagePercents[i];
+        if (dmgPercent < 0) dmgPercent = 0;
+        if (dmgPercent > 100) dmgPercent = 100;
+        float survPercent = 100.0f - dmgPercent;
+
+        int redH = (int)((dmgPercent / 100.0f) * maxH);
+        int greenH = maxH - redH; // Phần còn lại là màu xanh
+
+        int redTop = startY - redH;
+        int greenTop = redTop - greenH;
+
+        // 1. Phết màu Đỏ cho Khúc dưới (Sát thương)
+        if (redH > 0) {
+            RECT barDmg = { rectLeft, redTop, rectRight, startY - 1 };
+            FillRect(hdc, &barDmg, redBrush);
+        }
+
+        // 2. Phết màu Xanh cho Khúc trên (Sống sót) chồng ngay trên Đỏ
+        if (greenH > 0) {
+            RECT barSurv = { rectLeft, greenTop, rectRight, redTop };
+            FillRect(hdc, &barSurv, greenBrush);
+        }
+
+        // 3. Viết Nhãn % nằm TRONG CỘT để dễ nhìn
+        int centerTextX = rectLeft + 5;
+        if (redH > 15) {
+            std::string rTxt = std::to_string((int)(dmgPercent + 0.5f)) + "%";
+            SetTextColor(hdc, RGB(255, 255, 255));
+            TextOutA(hdc, centerTextX, startY - (redH / 2) - 8, rTxt.c_str(), (int)rTxt.size());
+        }
+        if (greenH > 15) {
+            std::string gTxt = std::to_string((int)(survPercent + 0.5f)) + "%";
+            SetTextColor(hdc, RGB(30, 30, 30)); // Chữ Tối trên nền Xanh sáng
+            TextOutA(hdc, centerTextX, redTop - (greenH / 2) - 8, gTxt.c_str(), (int)gTxt.size());
+        }
+
+        // Tên mục tiêu ở chân cột, VẼ ZÍC-ZẮC thò thụt để ko bị đè chữ
+        SetTextColor(hdc, RGB(255, 255, 255));
+        std::string tName = stats.targetNames[i];
+
+        // Nếu cột lẻ (1, 3, 5..) thì chữ tụt xuống 20 pixel, cột chẵn úp sát vạch
+        int textY = startY + 5;
+        if (i % 2 != 0) textY += 20;
+
+        TextOutA(hdc, rectLeft - 10, textY, tName.c_str(), (int)tName.size());
+    }
+
+    DeleteObject(redBrush);
+    DeleteObject(greenBrush);
+}
+
 
 POINT GraphRenderer::worldToScreen(double x, double y, RECT clientRect) const noexcept {
     int w = clientRect.right - clientRect.left; int h = clientRect.bottom - clientRect.top;
@@ -404,6 +490,7 @@ bool GraphRenderer::handleUnitClick(int mouseX, int mouseY, RECT clientRect)
     selectedUnitIndex_ = -1; // Click ra ngoài không gian thì đóng danh sách
     return false;
 }
+
 bool GraphRenderer::handleTargetClick(int mouseX, int mouseY, RECT clientRect)
 {
     if (!graph_) return false;

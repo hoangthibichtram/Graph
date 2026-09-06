@@ -2,8 +2,8 @@
 
 #include <windows.h>
 #include "Graph.h"
-#include "unitUAVList.h"
-#include "UAVOptimization.h"
+#include "UnitUAVList.h"
+#include "OptimizationTypes.h"
 #include "UAVMissionEngine.h"
 
 
@@ -17,7 +17,7 @@ public:
     void setUnitList(const UnitUAVList& list) noexcept;
 
     // Vẽ chính
-    void draw(HDC hdc, RECT clientRect);
+    void drawDashboard(HDC hdc, RECT clientRect);
 
     // Vẽ từng lớp
     void drawGraph(HDC hdc, RECT clientRect);
@@ -25,6 +25,8 @@ public:
     void drawUAVs(HDC hdc, RECT clientRect);
     void drawTargets(HDC hdc, RECT clientRect);
 
+    //Vẽ biểu đồ
+    void drawChart(HDC hdc, const RECT& rect, const UAVCore::MissionStatistics& stats);
 
     // Điều khiển view
     void zoomIn();
@@ -48,6 +50,7 @@ public:
     // GraphRenderer.h (thêm vào public:)
     bool handleTargetClick(int mouseX, int mouseY, RECT clientRect);
     std::vector<std::string> getUAVsForTarget(int targetIdx) const;
+
 private:
     const Graph* graph_;              // nguồn đồ thị (không sở hữu)
     const UnitUAVList* unitList_;     // danh sách đơn vị (không sở hữu)

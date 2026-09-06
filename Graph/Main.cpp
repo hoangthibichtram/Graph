@@ -19,7 +19,7 @@ BOOL                InitInstance(HINSTANCE, int);
 LRESULT CALLBACK    WndProc(HWND, UINT, WPARAM, LPARAM);
 INT_PTR CALLBACK    About(HWND, UINT, WPARAM, LPARAM);
 
-// ==================== CỬA SỔ BIỂU ĐỒ BAR CHART ====================
+// Chart
 LRESULT CALLBACK ChartWndProc(HWND hChart, UINT message, WPARAM wParam, LPARAM lParam)
 {
     switch (message)
@@ -31,88 +31,9 @@ LRESULT CALLBACK ChartWndProc(HWND hChart, UINT message, WPARAM wParam, LPARAM l
 
         RECT rect;
         GetClientRect(hChart, &rect);
-        HBRUSH bgBrush = CreateSolidBrush(RGB(40, 40, 40));
-        FillRect(hdc, &rect, bgBrush);
-        DeleteObject(bgBrush);
 
-        SetBkMode(hdc, TRANSPARENT);
-        SetTextColor(hdc, RGB(255, 255, 255));
-        TextOutA(hdc, 20, 20, "--- BIEU DO 100%: MUC TIEU DIET (DO) VA SONG SOT (XANH) THEO TUNG MUC TIEU ---", 70);
+        g_renderer.drawChart(hdc, rect, g_engine.GetMissionStatistics());
 
-        // Vẽ trục X và Y
-        HPEN axisPen = CreatePen(PS_SOLID, 2, RGB(200, 200, 200));
-        SelectObject(hdc, axisPen);
-
-        // Lùi trục X lên cao chút dể lấy nhiều đất cho chữ zíc zắc
-        int startX = 60, startY = rect.bottom - 80;
-        int maxH = startY - 60; // Chiều cao tuyệt đối của một cột 100%
-        if (maxH < 50) maxH = 50;
-
-        MoveToEx(hdc, startX, startY, nullptr); LineTo(hdc, rect.right - 20, startY); // Trục X
-        MoveToEx(hdc, startX, startY, nullptr); LineTo(hdc, startX, 40); // Trục Y
-        DeleteObject(axisPen);
-
-        UAVCore::MissionStatistics stats = g_engine.GetMissionStatistics();
-        int barWidth = 40;
-        int gap = 60; // Nới rộng khoảng cách giữa các cột ra!
-
-        HBRUSH redBrush = CreateSolidBrush(RGB(220, 40, 40));   // ĐỎ là Tiêu diệt
-        HBRUSH greenBrush = CreateSolidBrush(RGB(40, 200, 40)); // XANH là Sống sót
-
-        for (size_t i = 0; i < stats.targetDamagePercents.size(); ++i) {
-            int rectLeft = startX + 30 + i * (barWidth + gap);
-            int rectRight = rectLeft + barWidth;
-
-            // Mức sát thương (Màu đỏ, Vẽ từ dưới đáy đi lên)
-            float dmgPercent = stats.targetDamagePercents[i];
-            if (dmgPercent < 0) dmgPercent = 0;
-            if (dmgPercent > 100) dmgPercent = 100;
-            float survPercent = 100.0f - dmgPercent;
-
-            int redH = (int)((dmgPercent / 100.0f) * maxH);
-            int greenH = maxH - redH; // Phần còn lại là màu xanh
-
-            int redTop = startY - redH;
-            int greenTop = redTop - greenH;
-
-            // 1. Phết màu Đỏ cho Khúc dưới (Sát thương)
-            if (redH > 0) {
-                RECT barDmg = { rectLeft, redTop, rectRight, startY - 1 };
-                FillRect(hdc, &barDmg, redBrush);
-            }
-
-            // 2. Phết màu Xanh cho Khúc trên (Sống sót) chồng ngay trên Đỏ
-            if (greenH > 0) {
-                RECT barSurv = { rectLeft, greenTop, rectRight, redTop };
-                FillRect(hdc, &barSurv, greenBrush);
-            }
-
-            // 3. Viết Nhãn % nằm TRONG CỘT để dễ nhìn
-            int centerTextX = rectLeft + 5;
-            if (redH > 15) {
-                std::string rTxt = std::to_string((int)(dmgPercent + 0.5f)) + "%";
-                SetTextColor(hdc, RGB(255, 255, 255));
-                TextOutA(hdc, centerTextX, startY - (redH / 2) - 8, rTxt.c_str(), (int)rTxt.size());
-            }
-            if (greenH > 15) {
-                std::string gTxt = std::to_string((int)(survPercent + 0.5f)) + "%";
-                SetTextColor(hdc, RGB(30, 30, 30)); // Chữ Tối trên nền Xanh sáng
-                TextOutA(hdc, centerTextX, redTop - (greenH / 2) - 8, gTxt.c_str(), (int)gTxt.size());
-            }
-
-            // Tên mục tiêu ở chân cột, VẼ ZÍC-ZẮC thò thụt để ko bị đè chữ
-            SetTextColor(hdc, RGB(255, 255, 255));
-            std::string tName = stats.targetNames[i];
-
-            // Nếu cột lẻ (1, 3, 5..) thì chữ tụt xuống 20 pixel, cột chẵn úp sát vạch
-            int textY = startY + 5;
-            if (i % 2 != 0) textY += 20;
-
-            TextOutA(hdc, rectLeft - 10, textY, tName.c_str(), (int)tName.size());
-        }
-
-        DeleteObject(redBrush);
-        DeleteObject(greenBrush);
         EndPaint(hChart, &ps);
     }
     break;
@@ -126,7 +47,6 @@ LRESULT CALLBACK ChartWndProc(HWND hChart, UINT message, WPARAM wParam, LPARAM l
     }
     return 0;
 }
-// ===================================================================
 
 int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
     _In_opt_ HINSTANCE hPrevInstance,
@@ -255,7 +175,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
         HDC hdc = BeginPaint(hWnd, &ps);
         RECT clientRect;
         GetClientRect(hWnd, &clientRect);
-        g_renderer.draw(hdc, clientRect);
+        g_renderer.drawDashboard(hdc, clientRect);
         EndPaint(hWnd, &ps);
     }
     break;
