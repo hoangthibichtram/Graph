@@ -22,12 +22,13 @@ private:
     float radius;
     double costUSD;
     double budget;
+    int tau = 0;              // he so hanh trinh: 1=cam tu, 2=chien dau, 0=tu suy tu ma UAV
     std::string unit_id;
 
 public:
     UAV()
         : uav_id(-1), range(0), speed(0),
-        explosive(0), radius(0), costUSD(0)
+        explosive(0), radius(0), costUSD(0), budget(0)
     {
     }
 
@@ -36,7 +37,7 @@ public:
         float expl, float rad, double cost, const std::string& unit)
         : uav_id(id), uav_code(code), uav_type(type),
         range(rng), speed(spd), weapon(wpn),
-        explosive(expl), radius(rad), costUSD(cost),
+        explosive(expl), radius(rad), costUSD(cost), budget(0),
         unit_id(unit)
     {
     }
@@ -52,6 +53,8 @@ public:
     float getExplosive() const { return explosive; }
     float getRadius() const { return radius; }
     double getCost() const { return costUSD; }
+    double getBudget() const { return budget; }
+    int getTau() const { return tau; }
     const std::string& getUnitId() const { return unit_id; }
 
     // Setter
@@ -65,6 +68,8 @@ public:
     void setExplosize(float expl) { explosive = expl; }
     void setRadius(float rad) { radius = rad; }
     void setCost(double cost) { costUSD = cost; }
+    void setBudget(double b) { budget = b; }
+    void setTau(int t) { tau = t; }
     void setUnitId(const std::string& unit) { unit_id = unit; }
 
     void printInfo() const

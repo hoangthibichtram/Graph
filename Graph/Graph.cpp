@@ -293,8 +293,8 @@ bool Graph::ReadTargetFile(const std::string& path)
     int iCode = col({ "code" });
     int iName = col({ "name" });
     int iPrio = col({ "priority" });
-    int iExp = col({ "explosive" });
-    int iVal = col({ "military_value" });
+    int iExp = col({ "explosive_require" });
+    int iVal = col({ "value" });
     int iVtx = col({ "id_vertex","vertexid" });
 
     std::string line;

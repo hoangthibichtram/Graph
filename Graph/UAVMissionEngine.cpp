@@ -111,48 +111,34 @@ namespace UAVCore {
             stats.targetNames.push_back(t.name);
         }
 
-        if (m_bestSolution.nUavTypes > 0 && !m_bestSolution.paths.empty()) {
+        if (m_bestSolution.nUavTypes > 0 && !m_problem.uavs.empty()) {
 
-            std::vector<const UAV*> allUAVs;
-            const auto& units = m_graph.getUnitList().getUnits();
-            for (const auto& unit : units) {
-                for (const auto& u : unit.getUAVs()) {
-                    allUAVs.push_back(&u);
-                }
-            }
-
+            // Duyet theo prob.uavs (n UAV CA THE) chu khong theo danh sach don vi:
+            // sau khi khai trien theo so luong, hai danh sach nay khong con cung kich thuoc.
+            int n = m_bestSolution.nUavTypes;
+            int m = m_bestSolution.nTargets;
             std::vector<double> targetMissProb(targets.size(), 1.0);
 
-            for (size_t i = 0; i < m_bestSolution.paths.size(); ++i) {
-                const UAV* currentUav = (i < allUAVs.size()) ? allUAVs[i] : nullptr;
-                bool isThisUAVDeployed = false;
-                double uavCost = (currentUav != nullptr) ? currentUav->getCost() : 0.0;
-
-                const auto& targetsPathForUAVType = m_bestSolution.paths[i];
-                for (size_t j = 0; j < targetsPathForUAVType.size(); ++j) {
-                    const auto& path = targetsPathForUAVType[j];
-                    if (path.size() >= 2) {
-                        isThisUAVDeployed = true;
-
-                        double pij = 0.0;
-                        if (i < m_problem.uavs.size() && j < m_problem.uavs[i].pij.size()) {
-                            pij = m_problem.uavs[i].pij[j];
-                        }
-                        targetMissProb[j] *= (1.0 - pij);
-                    }
+            for (int i = 0; i < n && i < (int)m_problem.uavs.size(); ++i) {
+                bool deployed = false;
+                for (int j = 0; j < m && j < (int)targets.size(); ++j) {
+                    if (m_bestSolution.x[i * m + j] != 1) continue;
+                    deployed = true;
+                    targetMissProb[j] *= (1.0 - m_problem.uavs[i].pij[j]);
+                    stats.ourLossCost += m_problem.uavs[i].cij[j];   // c_ij thuc te
                 }
-
-                if (isThisUAVDeployed) {
-                    stats.totalUAVDeployed++;
-                    stats.ourLossCost += uavCost;
-                }
+                if (deployed) stats.totalUAVDeployed++;
             }
 
             for (size_t j = 0; j < targets.size(); ++j) {
                 double killProb = 1.0 - targetMissProb[j];
                 stats.targetDamagePercents[j] = (float)(killProb * 100.0);
                 stats.expectedDestroyedValue += (targets[j].value * killProb);
-                if (killProb > 0.5) stats.totalTargetsHit++;
+
+                // So muc tieu DA TIEN CONG = so muc tieu co y_j = 1, tuc la co it
+                // nhat mot phuong tien duoc phan cong. Truoc day dem theo nguong
+                // killProb > 0.5 - dai luong do khong co trong mo hinh.
+                if (m_bestSolution.y((int)j) == 1) stats.totalTargetsHit++;
             }
         }
 

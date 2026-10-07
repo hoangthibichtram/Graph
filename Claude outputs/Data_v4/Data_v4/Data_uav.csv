@@ -1,0 +1,7 @@
+uav_id,uav_code,uav_type,quantity,range,speed,weapon,explosive,radius,cost,unit_id
+1,B11,Cảm tử,3,21000,100,Đầu nổ phá mảnh,5,70,300,a1
+2,C11,Chiến đấu,3,44000,180,Tên lửa không đối đất,9,50,400,a1
+3,B21,Cảm tử,3,24000,130,Đầu đạn chống tăng,8,70,350,a2
+4,C21,Chiến đấu,2,56000,220,Tên lửa không đối đất,9,40,600,a2
+5,B31,Cảm tử,2,30000,185,Đầu đạn nổ phá,25,80,800,a3
+6,C31,Chiến đấu,2,60000,270,AGM-114 Hellfire,9,50,500,a3

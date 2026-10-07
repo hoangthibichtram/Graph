@@ -126,6 +126,7 @@
     <ClInclude Include="framework.h" />
     <ClInclude Include="Graph.h" />
     <ClInclude Include="GraphRenderer.h" />
+    <ClInclude Include="ExactSolver.h" />
     <ClInclude Include="Optimization.h" />
     <ClInclude Include="OptimizationTypes.h" />
     <ClInclude Include="Resource.h" />
@@ -135,6 +136,7 @@
     <ClInclude Include="UnitUAVList.h" />
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="ExactSolver.cpp" />
     <ClCompile Include="Graph.cpp" />
     <ClCompile Include="GraphRenderer.cpp" />
     <ClCompile Include="Main.cpp" />

@@ -1,26 +1,42 @@
 #include "Optimization.h"
+#include "ExactSolver.h"
 #include <random>
 #include <algorithm>
 #include <cmath>
 #include <iostream>
-#include <numeric> 
+#include <numeric>
 #include <chrono>
 #include <fstream>
 #include <sstream>
 #include <unordered_map>
 #include <limits>
+#include <iomanip>
 
+// ===========================================================================
+//  HAM PHU TRO
+// ===========================================================================
+static uint32_t g_seed = 0u;
+static bool     g_gaVerbose = true;   // chi in tien trinh khi chay mot lan
 
-//hàm phụ trợ
 static std::mt19937& rng()
 {
-    static std::mt19937 gen(
-        std::random_device{}() ^
-        (uint32_t)std::chrono::steady_clock::now().time_since_epoch().count()
-    );
+    static std::mt19937 gen = [] {
+        g_seed = (uint32_t)std::random_device{}() ^
+                 (uint32_t)std::chrono::steady_clock::now().time_since_epoch().count();
+        return std::mt19937(g_seed);
+    }();
     return gen;
 }
+static uint32_t currentSeed() { return g_seed; }
 
+// Gieo lai hat giong de ket qua tai lap duoc giua cac lan chay.
+static void seedRng(uint32_t s)
+{
+    rng().seed(s);   // ep khoi tao bo sinh TRUOC, tranh bi ghi de g_seed
+    g_seed = s;      // gan SAU nen con so ghi lai dung voi hat giong thuc te
+}
+
+// Doc bang xac suat p_ij. Khoa tra cuu la MA CHUNG LOAI, khong phai ma ca the.
 static std::unordered_map<std::string, double> loadPij(const std::string& path)
 {
     std::unordered_map<std::string, double> mp;
@@ -34,7 +50,7 @@ static std::unordered_map<std::string, double> loadPij(const std::string& path)
         s.erase(s.find_last_not_of(" \t\r\n") + 1);
         };
     std::string line;
-    std::getline(ifs, line); // Bỏ qua header
+    std::getline(ifs, line); // bo qua header
     while (std::getline(ifs, line))
     {
         if (line.empty()) continue;
@@ -57,40 +73,95 @@ static std::unordered_map<std::string, double> loadPij(const std::string& path)
     return mp;
 }
 
-// Khởi tạo tham số GA (kích thước quần thể, số thế hệ, tỉ lệ lai/đột biến)
+// Doc tham so chien dich tu Config.csv (dinh dang: key,value)
+//   campaign_budget : C  (USD)
+//   cost_coef_k     : k  (USD/km)
+// Chep nguyen ven mot tep (dung cho buoc dong bo sang du an ba chieu).
+static bool copyFileBinary(const std::string& from, const std::string& to)
+{
+    std::ifstream in(from, std::ios::binary);
+    if (!in) return false;
+    std::ofstream out(to, std::ios::binary | std::ios::trunc);
+    if (!out) return false;
+    out << in.rdbuf();
+    return out.good();
+}
+
+static void loadConfig(const std::string& path, OptimizationProblem& prob)
+{
+    std::ifstream ifs(path);
+    if (!ifs.is_open()) {
+        std::cout << "[CFG] Khong tim thay Config.csv -> dung mac dinh"
+                  << " (C khong gioi han, k=" << prob.costCoefK << ")\n";
+        return;
+    }
+    auto trim = [](std::string& s) {
+        s.erase(0, s.find_first_not_of(" \t\r\n"));
+        s.erase(s.find_last_not_of(" \t\r\n") + 1);
+        };
+    std::string line;
+    while (std::getline(ifs, line))
+    {
+        if (line.empty() || line[0] == '#') continue;
+        std::stringstream ss(line);
+        std::string key, val;
+        std::getline(ss, key, ',');
+        std::getline(ss, val, ',');
+        trim(key); trim(val);
+        if (val.empty()) continue;
+        try {
+            if (key == "campaign_budget") prob.campaignBudget = std::stod(val);
+            else if (key == "cost_coef_k") prob.costCoefK = std::stod(val);
+            else if (key == "ue_data_dir") prob.ueDataDir = val;
+            else if (key == "ga_seed")     prob.gaSeed = (unsigned)std::stoul(val);
+            else if (key == "ga_runs")     prob.gaRuns = std::stoi(val);
+            else if (key == "run_exact")   prob.runExact = (std::stoi(val) != 0);
+        }
+        catch (...) {}
+    }
+    std::cout << "[CFG] C = " << prob.campaignBudget
+              << " USD | k = " << prob.costCoefK << " USD/km\n";
+    if (!prob.ueDataDir.empty())
+        std::cout << "[CFG] Thu muc du an 3D: " << prob.ueDataDir << "\n";
+    if (prob.gaSeed != 0u)
+        std::cout << "[CFG] Hat giong co dinh ga_seed = " << prob.gaSeed << "\n";
+    if (prob.gaRuns > 1)
+        std::cout << "[CFG] Che do danh gia: chay lap " << prob.gaRuns << " lan\n";
+}
+
+// ===========================================================================
+//  THUAT TOAN DI TRUYEN
+// ===========================================================================
 UAVGAOptimizer::UAVGAOptimizer(const OptimizationProblem& problem,
-    int populationSize,
-    int maxGenerations,
-    double crossoverRate,
-    double mutationRate)
-    : prob_(problem)
-    , popSize_(populationSize)
-    , maxGen_(maxGenerations)
-    , pc_(crossoverRate)
-    , pm_(mutationRate)
+    int populationSize, int maxGenerations,
+    double crossoverRate, double mutationRate)
+    : prob_(problem), popSize_(populationSize), maxGen_(maxGenerations)
+    , pc_(crossoverRate), pm_(mutationRate)
 {
 }
 
-//GA
+// Kiem tra UAV i da nhan nhiem vu nao chua - hien thuc rang buoc (2.7)
+static inline bool isBusy(const AssignmentSolution& sol, int i, int m)
+{
+    for (int j = 0; j < m; ++j)
+        if (sol.at(i, j) == 1) return true;
+    return false;
+}
 
-// Khởi tạo quần thể: x[i,j] = số UAV loại i tấn công mục tiêu j
 void UAVGAOptimizer::initPopulation()
 {
-    int n = (int)prob_.uavs.size();    // số loại UAV (thực chất là số lượng từng con UAV)
-    int m = (int)prob_.targets.size(); // số mục tiêu
+    int n = (int)prob_.uavs.size();     // so UAV CA THE
+    int m = (int)prob_.targets.size();
 
-    if (n <= 0 || m <= 0)
-    {
-        population_.clear();
-        population_.resize(1);
-        population_[0] = { n, m, std::vector<int>(n * m, 0), 0.0 };
+    if (n <= 0 || m <= 0) {
+        population_.assign(1, { n, m, std::vector<int>(n * m, 0), 0.0 });
         return;
     }
 
     population_.clear();
     population_.resize(popSize_);
 
-    // Sắp xếp mục tiêu theo Priority tăng dần (Priority=1 quan trọng nhất)
+    // Thu tu muc tieu theo do uu tien (priority = 1 la quan trong nhat)
     std::vector<int> targetByPriority(m);
     std::iota(targetByPriority.begin(), targetByPriority.end(), 0);
     std::sort(targetByPriority.begin(), targetByPriority.end(), [&](int a, int b) {
@@ -106,96 +177,72 @@ void UAVGAOptimizer::initPopulation()
         sol.nUavTypes = n;
         sol.nTargets = m;
         sol.x.assign(n * m, 0);
+
         if (probDist(rng()) < 0.25)
         {
-            // Xáo trộn thứ tự UAV để các cá thể "thông minh" đa dạng hơn
+            // --- Khoi tao DINH HUONG: uu tien muc tieu quan trong truoc ---
             std::vector<int> uavOrder(n);
             std::iota(uavOrder.begin(), uavOrder.end(), 0);
             for (int s = n - 1; s > 0; --s) {
                 std::uniform_int_distribution<int> pick(0, s);
                 std::swap(uavOrder[s], uavOrder[pick(rng())]);
             }
-
-            // ── Khởi tạo "định hướng": gán UAV theo mục tiêu ưu tiên cao ──
-            // Duyệt từng mục tiêu theo thứ tự ưu tiên,
-            // cố gắng tìm UAV phù hợp (a_{ij}=1) chưa được gán
             for (int jIdx = 0; jIdx < m; ++jIdx)
             {
                 int j = targetByPriority[jIdx];
                 double accumulated = 0.0;
-                for (int orderIdx = 0; orderIdx < n; ++orderIdx)
+                for (int o = 0; o < n; ++o)
                 {
-                    int i = uavOrder[orderIdx];
-                    // Chỉ gán nếu: khả dụng + chưa gán mục tiêu nào (maxCount=1)
-                    if (prob_.uavs[i].aij[j] == 0) continue;
-                    int alreadyUsed = 0;
-                    for (int jj = 0; jj < m; ++jj)
-                        alreadyUsed += sol.at(i, jj);
-                    if (alreadyUsed >= prob_.uavs[i].maxCount) continue;
-
+                    int i = uavOrder[o];
+                    if (prob_.uavs[i].aij[j] == 0) continue;   // (2.10)
+                    if (isBusy(sol, i, m))         continue;   // (2.7)
                     sol.at(i, j) = 1;
                     accumulated += prob_.uavs[i].explosive;
-
-                    // Gán đủ lượng nổ thì dừng (không gán thêm UAV thừa)
                     if (accumulated >= prob_.targets[j].explosive_required) break;
                 }
             }
         }
         else
         {
-            // ── Khởi tạo ngẫu nhiên: mỗi UAV chọn 1 mục tiêu ngẫu nhiên ──
+            // --- Khoi tao NGAU NHIEN: moi UAV chon toi da 1 muc tieu ---
             for (int i = 0; i < n; ++i)
             {
-                // 90% khả năng gán nhiệm vụ (10% để UAV "nghỉ" → đa dạng gen)
-                if (probDist(rng()) < 0.9)
-                {
-                    int j = targetDist(rng());
-                    if (prob_.uavs[i].aij[j] != 0)
-                        sol.at(i, j) = 1;
-                }
+                if (probDist(rng()) >= 0.9) continue;  // 10% de UAV "nghi" -> da dang gen
+                int j = targetDist(rng());
+                if (prob_.uavs[i].aij[j] != 0) sol.at(i, j) = 1;
             }
         }
-        // Bắt buộc repair → evaluate cho mọi cá thể ban đầu
         repair(sol);
         evaluate(sol);
         population_[k] = sol;
     }
 }
-      
 
-// Chọn lọc roulette
+// Chon loc banh xe roulette tren do thich nghi da tinh tien ve mien duong
 AssignmentSolution UAVGAOptimizer::selectParent()
 {
-    // Tìm giá trị fitness nhỏ nhất trong quần thể
     double minFit = population_[0].fitness;
-
     for (auto& s : population_)
         if (s.fitness < minFit) minFit = s.fitness;
 
-    // Shift về dương: shifted = fitness - minFit + epsilon
     const double eps = 1e-9;
     double sumShifted = 0.0;
     std::vector<double> shifted(population_.size());
-    for (int k = 0; k < (int)population_.size(); ++k)
-    {
+    for (int k = 0; k < (int)population_.size(); ++k) {
         shifted[k] = population_[k].fitness - minFit + eps;
         sumShifted += shifted[k];
     }
-    // Quay roulette trên fitness đã shift
     std::uniform_real_distribution<double> dist(0.0, sumShifted);
-    double r = dist(rng());
-
-    double acc = 0.0;
-    for (int k = 0; k < (int)population_.size(); ++k)
-    {
+    double r = dist(rng()), acc = 0.0;
+    for (int k = 0; k < (int)population_.size(); ++k) {
         acc += shifted[k];
         if (acc >= r) return population_[k];
     }
     return population_.back();
 }
 
-//lai ghép
-AssignmentSolution UAVGAOptimizer::crossover(const AssignmentSolution& p1, const AssignmentSolution& p2)
+AssignmentSolution UAVGAOptimizer::crossover(const AssignmentSolution& p1,
+                                             const AssignmentSolution& p2)
 {
     AssignmentSolution child;
     child.nUavTypes = p1.nUavTypes;
@@ -208,245 +255,243 @@ AssignmentSolution UAVGAOptimizer::crossover(const AssignmentSolution& p1, const
 
     std::uniform_int_distribution<int> posDist(0, L - 1);
     std::uniform_real_distribution<double> prob(0.0, 1.0);
-
-    if (prob(rng()) < pc_)
-    {
+    if (prob(rng()) < pc_) {
         int cut = posDist(rng());
-        for (int k = cut; k < L; ++k)
-        {
-            child.x[k] = p2.x[k];
-        }
+        for (int k = cut; k < L; ++k) child.x[k] = p2.x[k];
     }
     return child;
 }
 
-//Đột biến
 void UAVGAOptimizer::mutate(AssignmentSolution& child)
 {
-    int n = child.nUavTypes;
-    int m = child.nTargets;
+    int n = child.nUavTypes, m = child.nTargets;
     std::uniform_real_distribution<double> prob(0.0, 1.0);
-
     for (int i = 0; i < n; ++i)
-    {
         for (int j = 0; j < m; ++j)
         {
-            // Ràng buộc cứng: UAV không khả dụng → không thể gán
-            if (prob_.uavs[i].aij[j] == 0)
-            {
-                child.at(i, j) = 0;
-                continue;
-            }
-            if (prob(rng()) < pm_)
-            {
-                int& xij = child.at(i, j);
-                xij = 1 - xij; // Đảo bit
-            }
+            if (prob_.uavs[i].aij[j] == 0) { child.at(i, j) = 0; continue; }
+            if (prob(rng()) < pm_) child.at(i, j) = 1 - child.at(i, j);
         }
-    }
 }
 
-
-void UAVGAOptimizer::repair(AssignmentSolution& sol)
+// ---------------------------------------------------------------------------
+//  DANH GIA: F = SUM_j v_j * (1 - PROD_i (1 - p_ij)^x_ij)
+//  Phuong an vi pham bat ky rang buoc nao deu bi loai bang do thich nghi rat thap.
+//  Khong con so hang phat: toan tu sua chua da bao dam tinh kha thi.
+// ---------------------------------------------------------------------------
+void UAVGAOptimizer::evaluate(AssignmentSolution& sol)
 {
-    if (sol.x.size() != sol.nUavTypes * sol.nTargets)
-        sol.x.assign(sol.nUavTypes * sol.nTargets, 0);
+    const double INFEASIBLE = -1e9;
+    int n = sol.nUavTypes, m = sol.nTargets;
 
-    int n = sol.nUavTypes;
-    int m = sol.nTargets;
-    if (n <= 0 || m <= 0) return;
-
-    // 1. Ràng buộc số lượng & ngân sách cho từng UAV 
+    double cost = 0.0;
     for (int i = 0; i < n; ++i)
     {
-
-        const auto& u = prob_.uavs[i];
-        int maxCount = u.maxCount;      // = 1 trong bài toán này
-        double value = u.ValuePerAttack;
-
-        // Thu thập các mục tiêu UAV i đang được gán, tính combined score
-        struct ScoredTarget {
-            int    j;
-            double score; // = efficiency * priorityWeight
-        };
-        std::vector<ScoredTarget> assigned;
-
+        int cnt = 0;
         for (int j = 0; j < m; ++j)
         {
             if (sol.at(i, j) != 1) continue;
-
-            double vj = prob_.targets[j].value;
-            double pij = u.pij[j];
-            int    prio = (prob_.targets[j].priority > 0) ? prob_.targets[j].priority : 1;
-            double combined = vj * pij / (double)prio;      // score = giá trị × xác suất / độ ưu tiên
-
-            assigned.push_back({ j, combined });
+            if (prob_.uavs[i].aij[j] == 0) { sol.fitness = INFEASIBLE; return; } // (2.10)
+            ++cnt;
+            cost += prob_.uavs[i].cij[j];
         }
-
-        if ((int)assigned.size() > maxCount)
-        {
-            std::sort(assigned.begin(), assigned.end(),
-                [](const ScoredTarget& a, const ScoredTarget& b) {
-                    return a.score > b.score; // Giảm dần: tốt nhất lên đầu
-                });
-
-            // Loại bỏ từ vị trí maxCount trở đi
-            for (int idx = maxCount; idx < (int)assigned.size(); ++idx)
-                sol.at(i, assigned[idx].j) = 0;
-        }
+        if (cnt > 1) { sol.fitness = INFEASIBLE; return; }                       // (2.7)
     }
-    // Xử lý theo thứ tự ưu tiên: mục tiêu quan trọng (Priority nhỏ) trước
-    std::vector<int> targetOrder(m);
-    std::iota(targetOrder.begin(), targetOrder.end(), 0);
-    std::sort(targetOrder.begin(), targetOrder.end(), [&](int a, int b) {
+    if (prob_.campaignBudget > 0.0 && cost > prob_.campaignBudget + 1e-9)
+    {
+        sol.fitness = INFEASIBLE; return;                                        // (2.6)
+    }
+
+    double F = 0.0;
+    for (int j = 0; j < m; ++j)
+    {
+        double Sj = 1.0, totalExplosive = 0.0;
+        bool anyAssigned = false;
+        for (int i = 0; i < n; ++i)
+        {
+            if (sol.at(i, j) != 1) continue;
+            Sj *= (1.0 - prob_.uavs[i].pij[j]);
+            totalExplosive += prob_.uavs[i].explosive;
+            anyAssigned = true;
+        }
+        if (!anyAssigned) continue;                       // y_j = 0 : hop le, khong tinh diem
+        if (totalExplosive < prob_.targets[j].explosive_required)
+        {
+            sol.fitness = INFEASIBLE; return;             // (2.8)
+        }
+        F += prob_.targets[j].value * (1.0 - Sj);
+    }
+    sol.fitness = F;
+}
+
+// ---------------------------------------------------------------------------
+//  SUA CHUA: dua ca the ve mien kha thi theo dung thu tu 4 buoc.
+//  Thu tu nay khong doi cho duoc: R2 phai truoc R3 (de R3 chi bo sung tu UAV
+//  thuc su ranh), va R1 phai sau cung (huy ca cum khong pha vo R2/R3/R4).
+// ---------------------------------------------------------------------------
+void UAVGAOptimizer::repair(AssignmentSolution& sol)
+{
+    int n = sol.nUavTypes, m = sol.nTargets;
+    if (n <= 0 || m <= 0) return;
+    if ((int)sol.x.size() != n * m) sol.x.assign(n * m, 0);
+
+    // ---- BUOC 1 : (2.10) tam bay ----
+    for (int i = 0; i < n; ++i)
+        for (int j = 0; j < m; ++j)
+            if (prob_.uavs[i].aij[j] == 0) sol.at(i, j) = 0;
+
+    // ---- BUOC 2 : (2.7) moi UAV toi da mot lan xuat kich ----
+    for (int i = 0; i < n; ++i)
+    {
+        int cnt = 0, bestJ = -1;
+        double bestE = -1.0;
+        for (int j = 0; j < m; ++j)
+        {
+            if (sol.at(i, j) != 1) continue;
+            ++cnt;
+            double cij = (prob_.uavs[i].cij[j] > 1.0) ? prob_.uavs[i].cij[j] : 1.0;
+            double e = prob_.targets[j].value * prob_.uavs[i].pij[j] / cij;
+            if (e > bestE) { bestE = e; bestJ = j; }
+        }
+        if (cnt <= 1) continue;
+        for (int j = 0; j < m; ++j)
+            if (j != bestJ) sol.at(i, j) = 0;
+    }
+
+    // ---- BUOC 3 : (2.8)(2.9) du hoa luc - BO SUNG TRUOC, HUY CUM SAU ----
+    std::vector<int> order(m);
+    std::iota(order.begin(), order.end(), 0);
+    std::sort(order.begin(), order.end(), [&](int a, int b) {
         return prob_.targets[a].priority < prob_.targets[b].priority;
         });
 
     for (int idx = 0; idx < m; ++idx)
     {
-        int    j = targetOrder[idx];
-        double Ej = prob_.targets[j].explosive_required;
-        if (Ej <= 0.0) continue;
+        int j = order[idx];
+        double need = prob_.targets[j].explosive_required;   // w_j
+        if (need <= 0.0) continue;
 
-        // Tính tổng lượng nổ hiện tại và danh sách UAV đã gán
-        double totalExplosive = 0.0;
-        std::vector<int> assignedList;
+        double have = 0.0;
+        for (int i = 0; i < n; ++i)
+            if (sol.at(i, j) == 1) have += prob_.uavs[i].explosive;
+
+        if (have <= 0.0) continue;   // muc tieu khong duoc chon: y_j = 0, van hop le
+        if (have >= need) continue;  // da du hoa luc
+
+        // Ung vien bo sung: UAV con RANH, kha dung voi j, co mang thuoc no
+        struct Cand { int i; double w; double key; };
+        std::vector<Cand> cands;
         for (int i = 0; i < n; ++i)
         {
-            if (sol.at(i, j) != 1) continue;
-            totalExplosive += prob_.uavs[i].explosive;
-            assignedList.push_back(i);
+            if (prob_.uavs[i].aij[j] == 0)      continue;
+            if (prob_.uavs[i].explosive <= 0.0) continue;
+            if (isBusy(sol, i, m))              continue;
+            double w = prob_.uavs[i].explosive;
+            cands.push_back({ i, w, prob_.uavs[i].cij[j] / w });  // re nhat tren 1 kg no
         }
-        /////////////
-        // ── Trường hợp DƯ: loại UAV explosive nhỏ nhất nếu còn đủ ──
-        if (totalExplosive > Ej && !assignedList.empty())
+        std::uniform_real_distribution<double> jitter(0.0, 0.15);
+        for (auto& c : cands) c.key *= (1.0 + jitter(rng()));
+        std::sort(cands.begin(), cands.end(),
+            [](const Cand& a, const Cand& b) { return a.key < b.key; });
+
+        for (auto& c : cands)
         {
-            // Sắp xếp theo explosive tăng dần: thử loại nhỏ nhất trước
-            std::sort(assignedList.begin(), assignedList.end(), [&](int a, int b) {
-                return prob_.uavs[a].explosive < prob_.uavs[b].explosive;
-                });
-            for (int iRemove : assignedList)
-            {
-                double e = prob_.uavs[iRemove].explosive;
-                if (totalExplosive - e >= Ej)
-                {
-                    // Vẫn đủ sau khi loại → giải phóng UAV này
-                    sol.at(iRemove, j) = 0;
-                    totalExplosive -= e;
-                }
-                // Nếu không thể loại thêm → dừng
-            }
-            continue; // Sang mục tiêu tiếp theo
+            if (have >= need) break;
+            sol.at(c.i, j) = 1;
+            have += c.w;
         }
-        // ── Trường hợp THIẾU: tìm UAV bổ sung ──
-        if (totalExplosive < Ej)
+
+        // Khong the bo sung du -> huy toan bo cum, dat y_j = 0
+        if (have < need)
+            for (int i = 0; i < n; ++i) sol.at(i, j) = 0;
+    }
+
+    // ---- BUOC 4 : (2.6) ngan sach chien dich ----
+    const double C = prob_.campaignBudget;
+    if (C <= 0.0) return;
+    while (true)
+    {
+        double cost = 0.0;
+        for (int i = 0; i < n; ++i)
+            for (int j = 0; j < m; ++j)
+                if (sol.at(i, j) == 1) cost += prob_.uavs[i].cij[j];
+        if (cost <= C + 1e-9) break;
+
+        // Huy cum co hieu qua thap nhat:  v_j (1 - S_j) / tong chi phi cum
+        int worstJ = -1;
+        double worstE = std::numeric_limits<double>::max();
+        for (int j = 0; j < m; ++j)
         {
-            double deficit = Ej - totalExplosive; // Lượng nổ còn thiếu
-
-            // Tìm các UAV ứng viên bổ sung:
-            // điều kiện: chưa gán j, a_{ij}=1, còn slot, có explosive > 0
-            struct Candidate {
-                int    i;
-                double explosive;
-                double gap; // |explosive - deficit|: nhỏ hơn = phù hợp hơn
-            };
-            std::vector<Candidate> candidates;
-
+            double Sj = 1.0, cj = 0.0;
+            bool any = false;
             for (int i = 0; i < n; ++i)
             {
-                if (sol.at(i, j) == 1) continue;             // Đã gán rồi
-                if (prob_.uavs[i].aij[j] == 0) continue;     // Không khả dụng
-                if (prob_.uavs[i].explosive <= 0.0) continue; // Trinh sát, bỏ qua
-
-                // Kiểm tra còn slot (chưa đạt maxCount)
-                int usedSlots = 0;
-                for (int jj = 0; jj < m; ++jj)
-                    usedSlots += sol.at(i, jj);
-                if (usedSlots >= prob_.uavs[i].maxCount) continue;
-
-                double ei = prob_.uavs[i].explosive;
-                double gap = std::abs(ei - deficit); // Gần deficit = ưu tiên
-                candidates.push_back({ i, ei, gap });
+                if (sol.at(i, j) != 1) continue;
+                Sj *= (1.0 - prob_.uavs[i].pij[j]);
+                cj += prob_.uavs[i].cij[j];
+                any = true;
             }
-
-            std::uniform_real_distribution<double> jitter(-0.5, 0.5);
-            for (auto& cand : candidates)
-                cand.gap += jitter(rng());
-
-            std::sort(candidates.begin(), candidates.end(),
-                [](const Candidate& a, const Candidate& b) { return a.gap < b.gap; });
-
-            // Thêm từng UAV bổ sung cho đến khi đủ lượng nổ
-            for (auto& cand : candidates)
-            {
-                if (totalExplosive >= Ej) break;
-                sol.at(cand.i, j) = 1;
-                totalExplosive += cand.explosive;
-                deficit -= cand.explosive;
-            }
-
-            // Sau khi cố tìm mà vẫn không đủ → hủy toàn bộ phân công j
-            // (phân công nửa vời không tiêu diệt được mục tiêu → lãng phí UAV)
-            if (totalExplosive < Ej)
-            {
-                for (int i = 0; i < n; ++i)
-                    sol.at(i, j) = 0;
-            }
+            if (!any || cj <= 0.0) continue;
+            double e = prob_.targets[j].value * (1.0 - Sj) / cj;
+            if (e < worstE) { worstE = e; worstJ = j; }
         }
-
+        if (worstJ < 0) break;
+        for (int i = 0; i < n; ++i) sol.at(i, worstJ) = 0;
     }
-    // Phòng ngừa crossover/mutate vô tình gán x_{ij}=1 cho cặp không khả dụng
-    for (int i = 0; i < n; ++i)
-        for (int j = 0; j < m; ++j)
-            if (prob_.uavs[i].aij[j] == 0)
-                sol.at(i, j) = 0;
 }
 
-
-// Chạy GA
 AssignmentSolution UAVGAOptimizer::run()
 {
-    std::cout << "[GA] Seed = " << std::random_device{}() << "\n";
+    rng();   // ep khoi tao bo sinh ngau nhien de lay dung seed
+    std::cout << "[GA] Seed = " << currentSeed()
+              << " | quan the = " << popSize_
+              << " | the he = " << maxGen_ << "\n";
     initPopulation();
+
+    // In gia tri tot nhat sau moi `step` the he de quan sat qua trinh hoi tu.
+    const int step = (maxGen_ >= 200) ? 50 : (maxGen_ / 10 > 0 ? maxGen_ / 10 : 1);
 
     AssignmentSolution best = population_[0];
     for (auto& sol : population_)
         if (sol.fitness > best.fitness) best = sol;
+
     for (int gen = 0; gen < maxGen_; ++gen)
     {
         std::vector<AssignmentSolution> newPop;
-        newPop.reserve(popSize_);
-        newPop.push_back(best);
+        newPop.reserve(popSize_ + 1);
+        newPop.push_back(best);                 // chien luoc tinh hoa
         for (int k = 0; k < popSize_; ++k)
         {
-            AssignmentSolution p1 = selectParent();
-            AssignmentSolution p2 = selectParent();
-            AssignmentSolution child = crossover(p1, p2);
+            AssignmentSolution child = crossover(selectParent(), selectParent());
             mutate(child);
             repair(child);
             evaluate(child);
             newPop.push_back(child);
-
-            if (child.fitness > best.fitness)
-                best = child;
+            if (child.fitness > best.fitness) best = child;
         }
-
         population_ = std::move(newPop);
-    }
 
+        if (g_gaVerbose && ((gen + 1) % step == 0 || gen + 1 == maxGen_))
+            std::cout << "[GA] The he " << std::setw(4) << (gen + 1)
+                      << " : F = " << std::fixed << std::setprecision(2)
+                      << best.fitness << "\n";
+    }
     return best;
 }
 
-
-
+// ===========================================================================
+//  XAY DUNG BAI TOAN TU DU LIEU + CHAY TOI UU
+// ===========================================================================
 OptimizationProblem OptimizationBuilder::build(const UnitUAVList& unitList,
     const Graph& graph, const std::string& dataDir)
 {
     OptimizationProblem prob;
 
-    // PHẦN 1: XÂY DỰNG DANH SÁCH MỤC TIÊU
-    const auto& targets = graph.GetTargets();
-    for (const auto& t : targets)
+    // ---- PHAN 0 : tham so chien dich ----
+    loadConfig(dataDir + "\\Config.csv", prob);
+
+    // ---- PHAN 1 : danh sach muc tieu ----
+    for (const auto& t : graph.GetTargets())
     {
         TargetOpt to;
         to.id = t.target_id;
@@ -456,220 +501,417 @@ OptimizationProblem OptimizationBuilder::build(const UnitUAVList& unitList,
         to.x = t.x;
         to.y = t.y;
         to.vertexId = t.id_vertex;
-        to.explosive_required = t.explosive;
-        to.priority = t.priority; // Đọc thẳng từ CSV (cột K)
-        prob.targets.push_back(to);         // Chỉ push 1 lần
+        to.explosive_required = t.explosive;   // w_j
+        to.priority = t.priority;
+        prob.targets.push_back(to);
 
-        std::cout << "[BUILD] Target " << to.id
-            << " \"" << to.name << "\""
-            << " | vertex=" << to.vertexId
-            << " | E_j=" << to.explosive_required
-            << " | v_j=" << to.value
-            << " | priority=" << to.priority << "\n";
+        std::cout << "[BUILD] Target " << to.id << " \"" << to.name << "\""
+                  << " | vertex=" << to.vertexId
+                  << " | w_j=" << to.explosive_required
+                  << " | v_j=" << to.value
+                  << " | priority=" << to.priority << "\n";
     }
     int m = (int)prob.targets.size();
 
-    // PHẦN 2: XÂY DỰNG DANH SÁCH UAV TẤN CÔNG
-    const auto& units = unitList.getUnits();
-    for (const auto& unit : units)
+    // ---- PHAN 2 : KHAI TRIEN TUNG CA THE UAV ----
+    // Mot dong CSV co quantity = q sinh ra q ban ghi doc lap trong prob.uavs.
+    // Nho vay so mu trong (1 - p_ij)^x_ij luon dung khi nhieu phuong tien
+    // cung chung loai cung danh mot muc tieu.
+    for (const auto& unit : unitList.getUnits())
     {
         for (const auto& u : unit.getUAVs())
         {
-            // Bỏ qua UAV không có lượng nổ (trinh sát hoặc dữ liệu lỗi)
-            if (u.getExplosive() <= 0.0)
-            {
+            if (u.getExplosive() <= 0.0) {
                 std::cout << "[BUILD] Bo qua UAV " << u.getCode()
-                    << " (explosive=0, khong tham gia GA)\n";
+                          << " (explosive=0, khong tham gia GA)\n";
                 continue;
             }
 
-            UAVTypeOpt opt;
-            opt.id = u.getId();
-            opt.code = u.getCode();
-            opt.explosive = u.getExplosive();
-            opt.ValuePerAttack = u.getCost();
-            opt.maxCount = (u.getQuantity() >= 1) ? u.getQuantity() : 1; 
-            opt.unitIndex = unitList.getUnitIndex(unit.getUnitId());
-            opt.unitName = unit.getUnitName();
-            opt.aij.resize(m, 1);   // Mặc định khả dụng với mọi mục tiêu
-            opt.pij.resize(m, 0.0); // Sẽ load từ Probability.csv
+            int q = (u.getQuantity() >= 1) ? u.getQuantity() : 1;
 
-            // ── RANGE CHECK: Tính khoảng cách Dijkstra thực tế ──
-            // Tìm đỉnh xuất phát của đơn vị 
-            int startV = unit.getVertexId();
-            double rangeM = u.getRange(); // Đơn vị: meter (sau khi đã sửa CSV)
-
-            std::cout << "[RANGE] UAV " << opt.code
-                << " (don vi " << opt.unitName << ")"
-                << " | range=" << rangeM / 1000.0 << "km"
-                << " | startV=" << startV << "\n";
-
-            for (int j = 0; j < (int)prob.targets.size(); ++j)
-            {
-                int endV = prob.targets[j].vertexId;
-
-                // Dijkstra: khoảng cách thực tế trên đồ thị (đơn vị meter)
-                double dist = graph.shortestPathDistance(startV, endV);
-
-                // So sánh với range → quyết định a_ij
-                if (dist > rangeM)
-                    opt.aij[j] = 0;
+            // He so hanh trinh tau: lay tu CSV neu co, neu khong suy tu tien to ma.
+            // Quy uoc du lieu: B* = cam tu (bay mot chieu), C* = chien dau (khu hoi).
+            int tau = u.getTau();
+            if (tau != 1 && tau != 2) {
+                const std::string& c = u.getCode();
+                tau = (!c.empty() && (c[0] == 'B' || c[0] == 'b')) ? 1 : 2;
             }
 
-            prob.uavs.push_back(opt);
-            std::cout << "[BUILD] UAV " << opt.code
-                << " | don_vi=" << opt.unitName
-                << " | explosive=" << opt.explosive
-                << " | value=" << opt.ValuePerAttack << "\n";
+            int   startV = unit.getVertexId();
+            double rangeM = (double)u.getRange();   // R_i, don vi met
+
+            for (int k = 0; k < q; ++k)
+            {
+                UAVOpt opt;
+                opt.id = u.getId() * 100 + (k + 1);
+                opt.baseCode = u.getCode();
+                opt.code = u.getCode() + "-" + std::to_string(k + 1);
+                opt.type = u.getType();
+                opt.instance = k + 1;
+                opt.tau = tau;
+                opt.range = rangeM;
+                opt.speed = u.getSpeed();
+                opt.explosive = u.getExplosive();          // w_i
+                opt.ValuePerAttack = u.getCost();          // c_i^0
+                opt.unitIndex = unitList.getUnitIndex(unit.getUnitId());
+                opt.unitName = unit.getUnitName();
+                opt.aij.assign(m, 1);
+                opt.pij.assign(m, 0.0);
+                opt.cij.assign(m, std::numeric_limits<double>::max());
+
+                for (int j = 0; j < m; ++j)
+                {
+                    // L_ij : duong di ngan nhat tren do thi (met)
+                    double L = graph.shortestPathDistance(startV, prob.targets[j].vertexId);
+
+                    // (2.2)  a_ij = 1  <=>  tau_i * L_ij <= R_i
+                    opt.aij[j] = (tau * L <= rangeM) ? 1 : 0;
+
+                    // (2.1)  c_ij = c_i^0 + k * L_ij / 1000
+                    opt.cij[j] = opt.ValuePerAttack + prob.costCoefK * (L / 1000.0);
+                }
+                prob.uavs.push_back(opt);
+            }
+
+            std::cout << "[BUILD] UAV " << u.getCode() << " x" << q
+                      << " | don_vi=" << unit.getUnitName()
+                      << " | w_i=" << u.getExplosive()
+                      << " | c_i0=" << u.getCost()
+                      << " | tau=" << tau
+                      << " | R=" << rangeM / 1000.0 << " km\n";
         }
     }
 
     int n = (int)prob.uavs.size();
-    std::cout << "[BUILD] Tong: " << n << " UAV tan cong, " << m << " muc tieu\n";
+    std::cout << "[BUILD] Tong: n = " << n << " UAV ca the, m = " << m << " muc tieu\n";
 
-    // PHẦN 3: GÁN XÁC SUẤT p_{ij} TỪ Probability.csv
+    // ---- PHAN 3 : gan xac suat p_ij (tra cuu theo MA CHUNG LOAI) ----
     auto pijMap = loadPij(dataDir + "\\Probability.csv");
-
     for (auto& uav : prob.uavs)
-    {
         for (int j = 0; j < m; ++j)
         {
-            std::string key = uav.code + "|" + std::to_string(prob.targets[j].id);
+            std::string key = uav.baseCode + "|" + std::to_string(prob.targets[j].id);
             uav.pij[j] = pijMap.count(key) ? pijMap[key] : 0.0;
         }
+
+    // Canh bao khi rang buoc tam bay khong co hieu luc
+    {
+        bool allAvail = true;
+        for (const auto& u : prob.uavs)
+            for (int j = 0; j < m; ++j)
+                if (u.aij[j] == 0) { allAvail = false; break; }
+        if (allAvail)
+            std::cout << "[BUILD] LUU Y: a_ij = 1 voi moi cap -> rang buoc (2.10) "
+                         "khong co hieu luc tren bo du lieu hien tai.\n";
     }
 
-    // PHẦN 4: CHẠY GENETIC ALGORITHM
-    int    populationSize = 200;
-    int    maxGenerations = 500;
-    double crossoverRate = 0.85;
-    double mutationRate = 0.1;
-
-    UAVGAOptimizer ga(prob, populationSize, maxGenerations, crossoverRate, mutationRate);
-    AssignmentSolution best = ga.run();
-    std::cout << "[GA] Hoan thanh. Best fitness = " << best.fitness << "\n";
-
-
-    // PHẦN 5: HẬU KỲ — BRUTE-FORCE SUBSET LƯỢNG NỔ
-    // Tìm tập con UAV NHỎ NHẤT (tổng explosive nhỏ nhất) đủ >= E_j
-    // để giải phóng UAV dư cho mục tiêu khác.
-    // O(2^k), k = số UAV/mục tiêu <= 7 → tối đa 128 tập con.
-    for (int j = 0; j < m; ++j)
+    // ---- PHAN 4 : chay thuat toan di truyen ----
+    // ga_runs = 1 : chay mot lan, dung de lap ke hoach tien cong.
+    // ga_runs > 1 : chay lap doc lap va in thong ke - so lieu danh gia chat
+    //               luong thuat toan dua thang vao bao cao.
+    const int nRuns = (prob.gaRuns > 1) ? prob.gaRuns : 1;
+    g_gaVerbose = (nRuns == 1);   // chay 30 lan thi khong in tien trinh cho do roi
+    AssignmentSolution best;
     {
-        double Ej = prob.targets[j].explosive_required;
-        if (Ej <= 0.0) continue;
-
-        std::vector<int> assignedUAVs;
-        for (int i = 0; i < n; ++i)
-            if (best.x[i * m + j] == 1 && prob.uavs[i].explosive > 0.0)
-                assignedUAVs.push_back(i);
-
-        int k = (int)assignedUAVs.size();
-        if (k == 0) continue;
-
-        double           minSum = std::numeric_limits<double>::max();
-        std::vector<int> bestSubset;
-
-        for (int mask = 1; mask < (1 << k); ++mask)
+        std::vector<double> fs;
+        fs.reserve(nRuns);
+        for (int r = 0; r < nRuns; ++r)
         {
-            double           sum = 0.0;
-            std::vector<int> subset;
-            for (int t = 0; t < k; ++t)
-            {
-                if (mask & (1 << t))
-                {
-                    sum += prob.uavs[assignedUAVs[t]].explosive;
-                    subset.push_back(assignedUAVs[t]);
-                }
-            }
-            if (sum >= Ej && sum < minSum)
-            {
-                minSum = sum;
-                bestSubset = subset;
-            }
+            // Hat giong co dinh: lan chay thu r dung ga_seed + r, nho vay ca
+            // mot lan chay lan ca bo nRuns lan deu tai lap duoc y nguyen.
+            if (prob.gaSeed != 0u) seedRng(prob.gaSeed + (uint32_t)r);
+
+            UAVGAOptimizer ga(prob, /*popSize*/200, /*maxGen*/500,
+                                    /*pc*/0.85,     /*pm*/0.10);
+            AssignmentSolution cur = ga.run();
+            fs.push_back(cur.fitness);
+            if (r == 0 || cur.fitness > best.fitness) best = cur;
+
+            if (nRuns > 1)
+                std::cout << "[GA] Lan " << (r + 1) << "/" << nRuns
+                          << " : F = " << cur.fitness << "\n";
         }
 
-        for (int iUAV : assignedUAVs)
+        if (nRuns > 1)
         {
-            bool keep = (std::find(bestSubset.begin(), bestSubset.end(), iUAV)
-                != bestSubset.end());
-            best.x[iUAV * m + j] = keep ? 1 : 0;
-        }
+            double sum = 0.0, mn = fs[0], mx = fs[0];
+            for (double v : fs) { sum += v; if (v < mn) mn = v; if (v > mx) mx = v; }
+            const double mean = sum / nRuns;
+            double var = 0.0;
+            for (double v : fs) var += (v - mean) * (v - mean);
+            const double sd = std::sqrt(var / (nRuns - 1));
+            int hit = 0;
+            for (double v : fs) if (v > mx - 1e-6) ++hit;
 
-        if (bestSubset.empty())
-        {
-            std::cout << "[SUBSET] CANH BAO: " << prob.targets[j].name
-                << " khong du UAV du luong no E_j=" << Ej << " → huy.\n";
-            for (int i = 0; i < n; ++i)
-                best.x[i * m + j] = 0;
+            std::cout << std::fixed
+                << "[GA] ----- Thong ke " << nRuns << " lan chay doc lap -----\n"
+                << "[GA] Tot nhat      = " << std::setprecision(4) << mx   << "\n"
+                << "[GA] Trung binh    = " << std::setprecision(4) << mean << "\n"
+                << "[GA] Xau nhat      = " << std::setprecision(4) << mn   << "\n"
+                << "[GA] Do lech chuan = " << std::setprecision(4) << sd   << "\n"
+                << "[GA] Sai lech xau nhat so voi tot nhat = "
+                << std::setprecision(3) << (mx > 0.0 ? (mx - mn) / mx * 100.0 : 0.0) << " %\n"
+                << "[GA] So lan dat muc tot nhat = " << hit << "/" << nRuns << "\n";
         }
         else
         {
-            std::cout << "[SUBSET] " << prob.targets[j].name
-                << " | E_j=" << Ej
-                << " | No hop le=" << minSum
-                << " | " << bestSubset.size() << " UAV\n";
+            std::cout << "[GA] Hoan thanh. F = " << best.fitness << "\n";
         }
     }
 
-    // PHẦN 6: TÍNH ĐƯỜNG BAY DIJKSTRA → best.paths[i][j]
-     // Với mỗi UAV tấn công i được gán mục tiêu j:
-     //   path = shortestPath(startV_đơn_vị → vertexId_mục_tiêu)
-    best.paths.resize(n, std::vector<std::vector<int>>(m));
-
-    for (int i = 0; i < n; ++i)
+    // ---- PHAN 4b : THUAT TOAN DOI CHUNG (muc 3.4) ----
+    // Chi chay khi Config.csv dat `run_exact,1`. Mac dinh TAT: quy hoach dong
+    // la cong cu kiem chung, khong nam tren duong chay tac chien (muc 3.4.7).
+    if (prob.runExact)
     {
-        const UAVTypeOpt& uav = prob.uavs[i];
-        const UnitUAV& unit = unitList.getUnit(uav.unitIndex);
+        ExactSolution ex = solveExact(prob);
+        if (!ex.ok)
+            std::cout << "[DP] Khong giai duoc: " << ex.note << "\n";
+        else
+        {
+            const double gap = (ex.value > 1e-9)
+                             ? 100.0 * (ex.value - best.fitness) / ex.value : 0.0;
+            std::cout << std::fixed << std::setprecision(4)
+                      << "[DP] F* = " << ex.value
+                      << " | chi phi = " << std::setprecision(2) << ex.cost
+                      << " | " << ex.nStates << " trang thai, "
+                      << ex.nPackages << " goi"
+                      << " | " << ex.ms << " ms\n";
+            std::cout << std::setprecision(4)
+                      << "[SS] Sai lech cua thuat toan di truyen = " << gap << " %\n";
+            prob.hasExact   = true;
+            prob.exactValue = ex.value;
+            prob.exactGap   = gap;
+            prob.exactMs    = ex.ms;
+        }
+    }
 
-        // Đỉnh xuất phát: đỉnh gần nhất với tọa độ căn cứ đơn vị.
-        int startV = unit.getVertexId();
-
+    // ---- PHAN 5 : KIEM DINH DOC LAP cac rang buoc (2.6)-(2.10) ----
+    {
+        bool ok = true;
+        double cost = 0.0;
+        for (int i = 0; i < n; ++i)
+        {
+            int cnt = 0;
+            for (int j = 0; j < m; ++j)
+            {
+                if (best.x[i * m + j] != 1) continue;
+                ++cnt;
+                cost += prob.uavs[i].cij[j];
+                if (prob.uavs[i].aij[j] == 0) {
+                    std::cout << "[CHECK] VI PHAM (2.10): " << prob.uavs[i].code
+                              << " -> " << prob.targets[j].name << "\n"; ok = false;
+                }
+            }
+            if (cnt > 1) {
+                std::cout << "[CHECK] VI PHAM (2.7): " << prob.uavs[i].code
+                          << " nhan " << cnt << " nhiem vu\n"; ok = false;
+            }
+        }
+        if (prob.campaignBudget > 0.0 && cost > prob.campaignBudget + 1e-6) {
+            std::cout << "[CHECK] VI PHAM (2.6): chi phi " << cost
+                      << " > C = " << prob.campaignBudget << "\n"; ok = false;
+        }
         for (int j = 0; j < m; ++j)
         {
-            if (best.x[i * m + j] != 1) continue; // UAV i không đánh mục tiêu j
+            double have = 0.0; bool any = false;
+            for (int i = 0; i < n; ++i)
+                if (best.x[i * m + j] == 1) { have += prob.uavs[i].explosive; any = true; }
+            if (any && have < prob.targets[j].explosive_required - 1e-9) {
+                std::cout << "[CHECK] VI PHAM (2.8): " << prob.targets[j].name
+                          << " co " << have << " kg < w_j = "
+                          << prob.targets[j].explosive_required << "\n"; ok = false;
+            }
+        }
+        std::cout << "[CHECK] " << (ok ? "Phuong an THOA MAN toan bo rang buoc."
+                                       : "!!! Phuong an VI PHAM rang buoc.")
+                  << " Tong chi phi = " << cost;
+        if (prob.campaignBudget > 0.0) std::cout << " / " << prob.campaignBudget;
+        std::cout << " USD\n";
+    }
 
+    // ---- PHAN 6 : duong bay Dijkstra ----
+    best.paths.assign(n, std::vector<std::vector<int>>(m));
+    for (int i = 0; i < n; ++i)
+    {
+        const UAVOpt& uav = prob.uavs[i];
+        int startV = unitList.getUnit(uav.unitIndex).getVertexId();
+        for (int j = 0; j < m; ++j)
+        {
+            if (best.x[i * m + j] != 1) continue;
             int endV = prob.targets[j].vertexId;
-
-            // Dijkstra: căn cứ đơn vị → mục tiêu j
             std::vector<int> path = graph.shortestPath(startV, endV);
-
-            if (path.empty())
-            {
-                // Fallback: đường thẳng 2 đỉnh nếu Dijkstra thất bại
-                // (Nguyên nhân thường gặp: cạnh chưa nối 2 chiều trong Edge.csv)
+            if (path.empty()) {
                 std::cout << "[DIJKSTRA] CANH BAO: Khong tim duoc duong "
-                    << startV << "→" << endV
-                    << " (UAV " << uav.code << " → " << prob.targets[j].name << ")\n"
-                    << "  CHECK: ReadEdgesFile() da goi AddEdge(eV,sV,w) 2 chieu chua?\n";
+                          << startV << "->" << endV << " (UAV " << uav.code << ")\n";
                 path = { startV, endV };
             }
-
             best.paths[i][j] = path;
-
-            // Log chi tiết đường bay để verify
-            std::cout << "[DIJKSTRA] " << uav.code
-                << " (" << uav.unitName << ")"
-                << " TAN CONG " << prob.targets[j].name
-                << " | " << startV << "→" << endV
-                << " | " << path.size() << " dinh: [";
-            for (int vi = 0; vi < (int)path.size(); ++vi)
-                std::cout << path[vi] << (vi + 1 < (int)path.size() ? "→" : "");
-            std::cout << "]\n";
+            std::cout << "[DIJKSTRA] " << uav.code << " (" << uav.unitName << ")"
+                      << " TAN CONG " << prob.targets[j].name
+                      << " | " << startV << "->" << endV
+                      << " | " << path.size() << " dinh\n";
         }
     }
 
-    // PHẦN 7: GÁN KẾT QUẢ VÀO prob.bestSolution
+    // ---- PHAN 7 : ket qua ----
     best.unitIndex.resize(n);
-    for (int i = 0; i < n; ++i)
-        best.unitIndex[i] = prob.uavs[i].unitIndex;
+    for (int i = 0; i < n; ++i) best.unitIndex[i] = prob.uavs[i].unitIndex;
 
-    prob.bestSolution.x = best.x;
-    prob.bestSolution.fitness = best.fitness;
-    prob.bestSolution.paths = best.paths;
-    prob.bestSolution.unitIndex = best.unitIndex;
-    prob.bestSolution.nUavTypes = best.nUavTypes;
-    prob.bestSolution.nTargets = best.nTargets;
+    std::cout << "[KET QUA] Muc tieu duoc tien cong (y_j = 1): ";
+    for (int j = 0; j < m; ++j)
+        if (best.y(j)) std::cout << prob.targets[j].name << "; ";
+    std::cout << "\n[KET QUA] Muc tieu bi loai (y_j = 0): ";
+    for (int j = 0; j < m; ++j)
+        if (!best.y(j)) std::cout << prob.targets[j].name << "; ";
+    std::cout << "\n";
+
+    // ---- PHAN 8 : XUAT KE HOACH TIEN CONG CHO MO PHONG BA CHIEU ----
+    // Chuong trinh hai chieu nay la NOI DUY NHAT giai bai toan toi uu.
+    // Du an Unreal Engine khong chay lai thuat toan; no chi doc hai tep
+    // sinh ra o day roi dung hinh. Nho vay hai chuong trinh khong the
+    // cho ra hai ket qua khac nhau.
+    // Toan bo noi dung hai tep deu la ASCII, tranh loi ma tieng Viet khi
+    // Unreal Engine doc tep khong co dau BOM.
+    {
+        const std::string planPath = dataDir + "\\MissionPlan.csv";
+        const std::string sumPath  = dataDir + "\\MissionSummary.csv";
+
+        std::ofstream fp(planPath, std::ios::binary);
+        if (!fp)
+        {
+            std::cout << "[XUAT] LOI: khong ghi duoc " << planPath << "\n";
+        }
+        else
+        {
+            fp << "sortie_id,uav_code,base_code,tau,unit_id,start_vertex,"
+                  "target_id,target_vertex,p_ij,c_ij,w_i,speed,path\r\n";
+
+            int    sortie    = 0;
+            double totalCost = 0.0;
+
+            for (int i = 0; i < n; ++i)
+            {
+                const UAVOpt&     uav    = prob.uavs[i];
+                const std::string unitId = unitList.getUnit(uav.unitIndex).getUnitId();
+                const int         startV = unitList.getUnit(uav.unitIndex).getVertexId();
+
+                for (int j = 0; j < m; ++j)
+                {
+                    if (best.x[i * m + j] != 1) continue;
+                    ++sortie;
+                    totalCost += uav.cij[j];
+
+                    // Chuoi dinh cua duong bay Dijkstra, ngan cach bang dau |
+                    std::string pathStr;
+                    const std::vector<int>& pv = best.paths[i][j];
+                    for (size_t t = 0; t < pv.size(); ++t)
+                    {
+                        if (t) pathStr += "|";
+                        pathStr += std::to_string(pv[t]);
+                    }
+
+                    fp << sortie                     << ','
+                       << uav.code                   << ','
+                       << uav.baseCode               << ','
+                       << uav.tau                    << ','
+                       << unitId                     << ','
+                       << startV                     << ','
+                       << prob.targets[j].id         << ','
+                       << prob.targets[j].vertexId   << ','
+                       << std::fixed
+                       << std::setprecision(4) << uav.pij[j]     << ','
+                       << std::setprecision(2) << uav.cij[j]     << ','
+                       << std::setprecision(2) << uav.explosive  << ','
+                       << std::setprecision(1) << uav.speed      << ','
+                       << pathStr << "\r\n";
+                }
+            }
+            fp.close();
+            std::cout << "[XUAT] MissionPlan.csv : " << sortie << " luot xuat kich\n";
+
+            // --- Tom tat cap chien dich ---
+            int    nAttacked  = 0;
+            double totalValue = 0.0;
+            for (int j = 0; j < m; ++j)
+            {
+                totalValue += prob.targets[j].value;
+                if (best.y(j)) ++nAttacked;
+            }
+
+            std::ofstream fs(sumPath, std::ios::binary);
+            if (fs)
+            {
+                fs << "key,value\r\n" << std::fixed;
+                fs << "F_objective,"        << std::setprecision(4) << best.fitness        << "\r\n";
+                fs << "total_cost,"         << std::setprecision(2) << totalCost           << "\r\n";
+                fs << "campaign_budget,"    << std::setprecision(2) << prob.campaignBudget << "\r\n";
+                fs << "cost_coef_k,"        << std::setprecision(2) << prob.costCoefK      << "\r\n";
+                fs << "total_target_value," << std::setprecision(2) << totalValue          << "\r\n";
+                fs << "n_uav_total,"        << n         << "\r\n";
+                fs << "n_uav_used,"         << sortie    << "\r\n";
+                fs << "n_target_total,"     << m         << "\r\n";
+                fs << "n_target_attacked,"  << nAttacked << "\r\n";
+                fs << "ga_seed,"            << currentSeed() << "\r\n";
+                if (prob.hasExact)
+                {
+                    fs << "F_optimal,"      << std::setprecision(4) << prob.exactValue << "\r\n";
+                    fs << "gap_percent,"    << std::setprecision(4) << prob.exactGap   << "\r\n";
+                }
+                fs.close();
+                std::cout << "[XUAT] MissionSummary.csv : F = " << best.fitness
+                          << " | chi phi = " << totalCost << " USD\n";
+            }
+            else
+            {
+                std::cout << "[XUAT] LOI: khong ghi duoc " << sumPath << "\n";
+            }
+        }
+    }
+
+    // ---- PHAN 9 : DONG BO SANG DU AN BA CHIEU ----
+    // Neu Config.csv co khai bao `ue_data_dir`, chep thang ke hoach va bo du
+    // lieu sang thu muc Content\Data cua du an Unreal Engine. Nho vay chi can
+    // chay chuong trinh nay la du an ba chieu da co du lieu moi nhat, khong
+    // phai chep tay hay chay them tep .bat nao.
+    if (!prob.ueDataDir.empty())
+    {
+        std::string dst = prob.ueDataDir;
+        if (dst.back() != '\\' && dst.back() != '/') dst += "\\";
+
+        struct Pair { const char* from; const char* to; };
+        const Pair files[] = {
+            { "MissionPlan.csv",    "MissionPlan.csv"    },
+            { "MissionSummary.csv", "MissionSummary.csv" },
+            { "Vertex.csv",         "Vertex1.csv"        },
+            { "Edge.csv",           "Edge1.csv"          },
+            { "UnitUAV.csv",        "UnitUAV1.csv"       },
+            { "Data_target.csv",    "Data_target1.csv"   },
+            { "Data_uav.csv",       "Data_uav1.csv"      },
+            { "Probability.csv",    "Probability1.csv"   },
+        };
+
+        int ok = 0, fail = 0;
+        for (const auto& f : files)
+        {
+            if (copyFileBinary(dataDir + "\\" + f.from, dst + f.to)) ++ok;
+            else {
+                ++fail;
+                std::cout << "[DONGBO] LOI: khong ghi duoc " << dst << f.to << "\n";
+            }
+        }
+        std::cout << "[DONGBO] Da chep " << ok << "/" << (ok + fail)
+                  << " tep sang du an ba chieu.\n";
+        if (fail > 0)
+            std::cout << "[DONGBO] LUU Y: Unreal Editor dang mo se khoa tep. "
+                         "Dong Editor roi chay lai chuong trinh nay.\n";
+    }
+    else
+    {
+        std::cout << "[DONGBO] Config.csv chua co khoa `ue_data_dir` "
+                     "-> bo qua buoc dong bo.\n";
+    }
+
+    prob.bestSolution = best;
     return prob;
 }
-

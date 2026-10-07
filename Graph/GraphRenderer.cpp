@@ -132,9 +132,18 @@ void GraphRenderer::drawDashboard(HDC hdc, RECT clientRect)
         dashboardText += L"[2] Ước tính sát thương gây ra (Kỳ vọng Pij): " + std::to_wstring((int)stats.expectedDestroyedValue) + L" $\n";
         dashboardText += L"[3] Chi phí triển khai lực lượng (Value UAV): " + std::to_wstring((int)stats.ourLossCost) + L" $\n";
 
-        int netProfit = (int)(stats.expectedDestroyedValue - stats.ourLossCost);
-        std::wstring profitStatus = (netProfit > 0) ? L" (LÃI)" : L" (LỖ)";
-        dashboardText += L"[4] Lợi nhuận/Thiệt hại: " + std::to_wstring(netProfit) + L" $" + profitStatus + L"\n";
+        // Mo hinh quan su: muc tieu la CUC DAI sat thuong trong gioi han ngan sach C,
+        // khong phai cuc dai chenh lech gia tri. Vi vay o day bao cao muc do su dung
+        // ngan sach chu khong phai "loi nhuan".
+        const double C = m_engine->GetProblem().campaignBudget;
+        if (C > 0.0) {
+            int pct = (int)(stats.ourLossCost / C * 100.0 + 0.5);
+            dashboardText += L"[4] Ngân sách đã dùng: " + std::to_wstring((int)stats.ourLossCost)
+                + L" / " + std::to_wstring((int)C) + L" $ (" + std::to_wstring(pct) + L" %)\n";
+        }
+        else {
+            dashboardText += L"[4] Ngân sách chiến dịch: không giới hạn\n";
+        }
         dashboardText += L"[5] Mức độ tiêu diệt căn cứ địch: " + std::to_wstring((int)stats.successRate) + L" %\n";
         dashboardText += L"[6] Số mục tiêu đã tấn công: " + std::to_wstring(stats.totalTargetsHit) + L"\n";
         dashboardText += L"[7] Số UAV tham chiến: " + std::to_wstring(stats.totalUAVDeployed) + L" UAV.\n";
@@ -207,7 +216,7 @@ void GraphRenderer::drawChart(HDC hdc, const RECT& rect, const UAVCore::MissionS
 
     SetBkMode(hdc, TRANSPARENT);
     SetTextColor(hdc, RGB(255, 255, 255));
-    TextOutA(hdc, 20, 20, "--- BIỂU ĐỒ: MỨC TIÊU DIỆT (ĐỎ) VÀ SỐNG SÓT (XANH) THEO TỪNG MỤC TIÊU ---", 70);
+    TextOutA(hdc, 20, 20, "BIỂU ĐỒ: MỨC TIÊU DIỆT (ĐỎ) VÀ SỐNG SÓT (XANH)", 70);
 
     // Vẽ trục X và Y
     HPEN axisPen = CreatePen(PS_SOLID, 2, RGB(200, 200, 200));

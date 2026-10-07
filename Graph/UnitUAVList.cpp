@@ -230,6 +230,8 @@ bool UnitUAVList::loadUAVsFromCombinedFile(const std::string& path)
     int iExp = col({ "explosive","explosize","expl" });
     int iRadius = col({ "radius" });
     int iCost = col({ "cost_usd","cost","price" });
+    int iBudget = col({ "budget" });
+    int iTau    = col({ "tau","sortie","hanh_trinh" });
     int iUnit = col({ "unit_id","unit","unitid" });
 
     std::string line;
@@ -269,6 +271,9 @@ bool UnitUAVList::loadUAVsFromCombinedFile(const std::string& path)
             if (iExp >= 0) u.setExplosize(std::stof(tok[iExp]));
             if (iRadius >= 0) u.setRadius(std::stof(tok[iRadius]));
             if (iCost >= 0) u.setCost(std::stod(tok[iCost]));
+            if (iBudget >= 0) u.setBudget(std::stod(tok[iBudget]));
+            if (iTau >= 0 && iTau < (int)tok.size() && !tok[iTau].empty())
+                u.setTau(std::stoi(tok[iTau]));
             u.setUnitId(unitId);
 
             unit->addUAV(u);
